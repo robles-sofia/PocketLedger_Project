@@ -1,5 +1,5 @@
 /* 
-This file is used SOLELY to set-up the data base, the FIRST time it is run. Running it subsequently will 
+This file is used SOLELY to set-up the database, the FIRST time it is run. Running it subsequently will 
 DELETE all existing data in the database. Do NOT run it arbitrarily.
 
 */ 
