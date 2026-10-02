@@ -1,12 +1,12 @@
 package edu.okstate.pocketledger;
 
-public class Transaction{
+public class TestTransaction{
     private String date;
     private double amount;
     private String location;
     private String category;
 
-    public Transaction(String date, double amount, String location, String category){
+    public TestTransaction(String date, double amount, String location, String category){
         this.date = date;
         this.amount = amount;
         this.location = location;

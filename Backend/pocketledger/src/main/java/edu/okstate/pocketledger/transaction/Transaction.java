@@ -1,13 +1,14 @@
 package edu.okstate.pocketledger.transaction;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
-import java.time.LocalDate;
 
 // map row in transaction table to java object
 // doesn't create table, just matches it (validate)
@@ -21,7 +22,7 @@ public class Transaction{
     @Column(name = "transaction_id")
     private Long id;
 
-    // Transaction amount (delta on the table)
+    //Transaction amount (delta on the table)
     @Column(name = "delta", nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
 
@@ -39,4 +40,8 @@ public class Transaction{
 
     //Add category and account later. I'm lazy
 
+
+    //Empty constructor for JPA
+    protected Transaction(){
+    }
 }
