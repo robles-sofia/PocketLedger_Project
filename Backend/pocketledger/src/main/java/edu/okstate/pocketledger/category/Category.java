@@ -18,12 +18,25 @@ public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "category_id")
-    private Long id;
+    private Integer id;
 
     @Column(name = "category_label", nullable = false, unique = true, length = 255)
     private String categoryLabel;
 
     // Empty constructor for JPA
     protected Category() {
+    }
+
+    // Constructor with parameters
+    public Category(String categoryLabel){
+        this.categoryLabel = categoryLabel;
+    }
+
+    public Integer getId(){
+        return id;
+    }
+
+    public String getCategoryLabel(){
+        return categoryLabel;
     }
 }
