@@ -13,7 +13,7 @@ const grainTexture =
 export default function LoginPage() { 
   function handleLogin() { 
     if (USE_MOCK) { //Go straight to the home page while using mock data
-      window.location.href = "/"; 
+      window.location.href = "/dashboard"; 
       return; 
     } 
     window.location.href = `${BACKEND_URL}/oauth2/authorization/google`; //Use Google OAuth when the backend login is ready
