@@ -9,13 +9,17 @@ const Pages = {
     settings: "/settings",
     login: "/login",
 };
+
+{/* TODO: Hide Navbar on Login page */}
 export default function Navbar() {
     return (
         <div className="flex flex-row justify-content-center align-items-center
         gap-1">
+            {/* Title Box. Also links to dashboard */}
             <span className="basis-1/4 border-8 border-double border-red p-2 rounded-lg text-center">
                 <Link href={Pages.dashboard}>PocketLedger</Link>
             </span>
+            {/* Navigation Box */}
             <nav className="grow grid grid-cols-4 gap-4 text-center
             border-8 border-double border-red p-2 rounded-lg">
                 <Link href={Pages.dashboard}>Dashboard</Link>
