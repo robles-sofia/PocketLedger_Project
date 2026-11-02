@@ -22,12 +22,9 @@ export default function DashboardPage() {
     } 
 
     return (
-        <main className="relative flex min-h-screen flex-col overflow-hidden bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% md:flex-row md:bg-linear-to-r"> 
-            {/* Background grid */}
-            <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(#9BB5A3_1px,transparent_1px),linear-gradient(90deg,#9BB5A3_1px,transparent_1px)] [background-size:32px_32px]" />
-            
-            {/* grid flexbox. layout stuff via col-# and row-# */}
-            <div className="grid grow grid-flow-col grid-cols-6 grid-rows-6 gap-6 p-8 border-2 border-double border-indigo-300">
+        
+            <main className="grid grow grid-flow-col grid-cols-6 grid-rows-6 gap-6 p-8 
+            border-2 border-double border-indigo-300">
                 
                 {/* Box 1 */}
                 <div className="col-start-2 col-span-4 row-span-1  border-8 border-double border-indigo-300 
@@ -87,8 +84,8 @@ export default function DashboardPage() {
                     </button> 
                     </div>
                 </div>
-            </div>
-        </main>
+            </main>
+     
     )
 
 

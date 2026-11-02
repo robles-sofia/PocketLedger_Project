@@ -20,12 +20,8 @@ export default function importPage() {
         console.log("Form Submitted Data:", data);
     };
     return (
-        <main className="relative flex min-h-screen flex-col overflow-hidden bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% md:flex-row md:bg-linear-to-r"> 
-            {/* Background grid */}
-            <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(#9BB5A3_1px,transparent_1px),linear-gradient(90deg,#9BB5A3_1px,transparent_1px)] [background-size:32px_32px]" />
-            
-            {/* grid flexbox. layout stuff via col-# and row-# */}
-            <div className="grid grow grid-flow-row grid-cols-6 grid-rows-6 gap-6 p-8 border-2 border-double border-indigo-300">
+            <main className="grid grow grid-flow-row grid-cols-6 grid-rows-6 gap-6 p-8 
+            border-2 border-double border-indigo-300">
                 
                 {/* Box 1 */}
                 <div className="col-start-1 col-span-5 row-span-1  border-8 border-double border-indigo-300 text-black">01
@@ -57,6 +53,7 @@ export default function importPage() {
                         </button>
                     </form>
                 </div>
+                {/* Manual Form Box */}
                 <div className="col-span-3 row-span-3 border-8 border-double border-indigo-300
                 flex flex-col justify-center text-black">
                     <label htmlFor="manualForm" className="block text-sm font-medium text-gray-700">
@@ -91,8 +88,8 @@ export default function importPage() {
                     </form>
                 </div>
 
-            </div>
+            </main>
             
-        </main>
+        
     )
 }
