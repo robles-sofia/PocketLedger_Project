@@ -3,9 +3,9 @@ import {useEffect, useMemo, useState} from "react";
 import { Plus, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError, checkBackendConnection} from "../../../lib/api";
+import type { Account, AccountType } from "../../../types/api";
 
-//Use mock data for now, change to false when accounts are ready in the backend
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 //Transaction data used on this page
 interface Row {
@@ -29,6 +29,14 @@ interface BackendTransaction {
   accountId: number;
 }
 
+//Account data returned by GET /api/accounts
+interface BackendAccount {
+  id: number;
+  name: string;
+  type: AccountType;
+  currency?: string;
+}
+
 //Change backend transaction data into the format used on this page
 function fromBackend(t: BackendTransaction): Row {
   return {
@@ -42,6 +50,17 @@ function fromBackend(t: BackendTransaction): Row {
   };
 }
 
+//Change backend account data into the format used on this page
+function accountFromBackend(a: BackendAccount): Account {
+  //The backend does not send a currency yet, so use USD by default
+  let currency = "USD";
+  if (a.currency) {
+    currency = a.currency;
+  }
+
+  return { id: a.id, name: a.name, type: a.type, currency: currency };
+}
+
 //Change mock transactions into the same format
 const mockRows: Row[] = mockTransactions.map((t) => ({
   id: t.id,
@@ -53,13 +72,10 @@ const mockRows: Row[] = mockTransactions.map((t) => ({
   accountId: t.accountId,
 }));
 
-//Use mock categories and accounts until the backend endpoints are ready
+//Categories are still mock: the backend has no GET /api/categories yet.
+//The IDs 1-12 match the default categories in the database. Colors only live in the frontend
 const categories = mockCategories;
-const accounts = mockAccounts;
-
-//Find categories and accounts by their ID
 const categoryById = new Map(categories.map((c) => [c.id, c]));
-const accountById = new Map(accounts.map((a) => [a.id, a]));
 
 //Show money with the correct currency symbol
 function formatMoney(amount: number, currency: string) {
@@ -78,7 +94,8 @@ const inputClass =
   "mt-1 w-full rounded-lg border border-[#CFE0CF] bg-white px-3 py-2 text-[#3F4A45] focus:outline-none focus:ring-2 focus:ring-[#A9C9B0]";
 
 export default function TransactionsPage() {
-  //Store transactions and selected account
+  //Store accounts, transactions, and selected account
+  const [accounts, setAccounts] = useState<Account[]>(USE_MOCK ? mockAccounts : []);
   const [rows, setRows] = useState<Row[]>(USE_MOCK ? mockRows : []);
   const [accountFilter, setAccountFilter] = useState<number | "all">("all");
 
@@ -88,25 +105,65 @@ export default function TransactionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [backendStatus, setBackendStatus] = useState("");
 
-  //Load transactions from the backend when mock data is off
+  //Find accounts by their ID
+  const accountById = new Map<number, Account>();
+  for (const account of accounts) {
+    accountById.set(account.id, account);
+  }
+
+  //Load the user's accounts, then the transactions for every account
   useEffect(() => {
     if (USE_MOCK) return;
 
-    //Get transactions for the selected account or all accounts
-    const ids = accountFilter === "all" ? accounts.map((a) => a.id) : [accountFilter];
+    async function load() {
+      try {
+        //Get the user's accounts from the backend
+        const accountData = await apiFetch<BackendAccount[] | { accounts: BackendAccount[] }>("/api/accounts");
 
-    Promise.all(
-      ids.map((id) => apiFetch<BackendTransaction[] | { transactions: BackendTransaction[] }>(`/api/transactions?accountId=${id}`))
-    )
-      .then((results) => {
-        //Get transactions from either backend response format
-        const all = results.flatMap((r) => (Array.isArray(r) ? r : r.transactions));
-        setRows(all.map(fromBackend));
+        //The backend sends a list. 
+        let accountList: BackendAccount[] = [];
+        if (Array.isArray(accountData)) {
+          accountList = accountData;
+        } else {
+          accountList = accountData.accounts;
+        }
+
+        //Change each account into the format used on this page
+        const loadedAccounts: Account[] = [];
+        for (const account of accountList) {
+          loadedAccounts.push(accountFromBackend(account));
+        }
+        setAccounts(loadedAccounts);
+
+        //Get the transactions for each account
+        const allRows: Row[] = [];
+        for (const account of loadedAccounts) {
+          const transactionData = await apiFetch<BackendTransaction[] | { transactions: BackendTransaction[] }>(
+            `/api/transactions?accountId=${account.id}`
+          );
+
+          //The backend sends a list. 
+          let transactionList: BackendTransaction[] = [];
+          if (Array.isArray(transactionData)) {
+            transactionList = transactionData;
+          } else {
+            transactionList = transactionData.transactions;
+          }
+
+          for (const t of transactionList) {
+            allRows.push(fromBackend(t));
+          }
+        }
+        setRows(allRows);
         setLoadError("");
-      })
-      .catch((e) => setLoadError(e instanceof ApiRequestError ? e.message : "Could not load transactions."))
-      .finally(() => setLoading(false));
-  }, [accountFilter]);
+      } catch (e) {
+        setLoadError(e instanceof ApiRequestError ? e.message : "Could not load transactions.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   //Filter transactions by account and show the newest ones first
   const visible = useMemo(
@@ -129,6 +186,12 @@ export default function TransactionsPage() {
     return { income, expense };
   }, [visible]);
 
+  //Loading is done with no error, but the user has no accounts yet
+  let noAccounts = false;
+  if (!loading && !loadError && accounts.length === 0) {
+    noAccounts = true;
+  }
+
   return (
     <main className="relative min-h-screen bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% px-4 py-8 md:px-10">
       {/* Background grid */}
@@ -149,10 +212,7 @@ export default function TransactionsPage() {
             <select
               aria-label="Filter by account"
               value={accountFilter}
-              onChange={(e) => {
-                setLoading(!USE_MOCK);
-                setAccountFilter(e.target.value === "all" ? "all" : Number(e.target.value));
-              }}
+              onChange={(e) => setAccountFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
               className="rounded-lg border border-[#CFE0CF] bg-white px-3 py-2 text-sm text-[#3F4A45]"
             >
               <option value="all">All accounts</option>
@@ -161,10 +221,11 @@ export default function TransactionsPage() {
               ))}
             </select>
 
-            {/* Open the add transaction form */}
+            {/* Open the add transaction form (needs at least one account) */}
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 rounded-lg border border-[#CFE0CF] bg-[#EEF5EC] px-4 py-2 font-medium text-[#3F5747] transition hover:-translate-y-0.5 hover:bg-[#E4EFE3] hover:shadow-sm"
+              disabled={accounts.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-[#CFE0CF] bg-[#EEF5EC] px-4 py-2 font-medium text-[#3F5747] transition hover:-translate-y-0.5 hover:bg-[#E4EFE3] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
               <Plus className="h-4 w-4" /> Add transaction
             </button>
@@ -188,7 +249,10 @@ export default function TransactionsPage() {
           {/* Show loading, error, or empty message */}
           {loading && <p className="p-6 text-sm text-[#7A8580]">Loading…</p>}
           {loadError && <p className="p-6 text-sm text-[#B5574B]">{loadError}</p>}
-          {!loading && !loadError && visible.length === 0 && (
+          {noAccounts && (
+            <p className="p-6 text-sm text-[#7A8580]">You don&apos;t have any accounts yet. Create an account first to add transactions.</p>
+          )}
+          {!loading && !loadError && !noAccounts && visible.length === 0 && (
             <p className="p-6 text-sm text-[#7A8580]">No transactions yet.</p>
           )}
 
@@ -253,8 +317,9 @@ export default function TransactionsPage() {
       </div>
 
       {/* Show the form when Add transaction is clicked */}
-      {showForm && (
+      {showForm && accounts.length > 0 && (
         <AddTransactionForm
+          accounts={accounts}
           onClose={() => setShowForm(false)}
           onCreated={(row) => {
             setRows((prev) => [row, ...prev]);
@@ -266,8 +331,15 @@ export default function TransactionsPage() {
   );
 }
 
+//Information the form gets from the page
+interface AddTransactionFormProps {
+  accounts: Account[]; 
+  onClose: () => void; 
+  onCreated: (row: Row) => void; 
+}
+
 //Form for adding a new transaction
-function AddTransactionForm({ onClose, onCreated }: { onClose: () => void; onCreated: (row: Row) => void }) {
+function AddTransactionForm({ accounts, onClose, onCreated }: AddTransactionFormProps) {
   //Store the information entered in the form
   const [date, setDate] = useState(today());
   const [kind, setKind] = useState<"expense" | "income">("expense");
