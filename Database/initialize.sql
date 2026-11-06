@@ -96,7 +96,7 @@ SHOW TABLES; -- Shows that tables exist
 
 
 
-
+/*
 -- Test stuff; delete later
 INSERT INTO user(email_address, credential, settings_json)
 VALUES ('bob@hotmail.com', 'bobizcool', '{}');
@@ -126,3 +126,4 @@ INSERT INTO budget_entry(budget_id, category, allotted) VALUES
 (1, 2, 75);
 
 SELECT * FROM budget_entry; -- Passes
+*/
