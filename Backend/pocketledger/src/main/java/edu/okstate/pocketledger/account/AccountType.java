@@ -10,12 +10,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 // four account types from contract
 public enum AccountType {
-    CHECKING, SAVINGS, CREDIT, CASH;
+    checking, savings, credit, cash;
 
     // translates between JSON and Java
     @JsonValue
     public String toJson() {
-        return name().toLowerCase();
+        return name();
     }
 
     @JsonCreator
