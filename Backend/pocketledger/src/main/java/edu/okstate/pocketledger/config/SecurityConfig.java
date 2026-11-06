@@ -56,9 +56,9 @@ public class SecurityConfig{
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-        .authorizeHttpRequests(auth -> auth .requestMatchers("/api/health", "/api/auth/**").permitAll()
+        .authorizeHttpRequests(auth -> auth .requestMatchers("/api/health", "/api/auth/register", "/api/auth/login").permitAll()
 
-        .requestMatchers("/api/accounts").permitAll() .anyRequest().authenticated())    // until login exists
+        .anyRequest().authenticated())
 
         // unblocking curl and fetch POSTs
         .csrf(csrf -> csrf.disable())

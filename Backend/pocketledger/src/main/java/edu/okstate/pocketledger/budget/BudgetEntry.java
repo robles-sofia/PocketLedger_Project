@@ -32,7 +32,7 @@ public class BudgetEntry {
     @JoinColumn(name = "category", nullable = false)
     private Category category;
 
-    @Column(name = "allotted", nullable = false, precision = 14, scale = 2)
+    @Column(name = "allotted", nullable = false, precision = 22, scale = 10)
     private BigDecimal allotted;
 
     protected BudgetEntry() {}
