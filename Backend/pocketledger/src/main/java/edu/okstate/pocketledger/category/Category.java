@@ -20,7 +20,7 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "category")
 public class Category {
-    // Default categories are assigned to user zero. Need to go in and implement this.
+    // Default categories are assigned to user one. Need to go in and implement this.
 
     //Category Id (Primary key)
     @Id
