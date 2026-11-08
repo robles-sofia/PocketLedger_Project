@@ -10,26 +10,27 @@ const Pages = {
     login: "/login",
 };
 
-{/* TODO: Hide Navbar on Login page */}
+//Style for each link, light green background when the mouse is over it
+const linkClass = "rounded-lg px-2 py-1 hover:bg-[#EEF5EC]";
+
 export default function Navbar() {
     return (
-        <div className="flex flex-row justify-content-center align-items-center
-        gap-1
+        <div className="flex flex-col md:flex-row items-center
+        gap-4 border-b border-[#EDE6D3] bg-[#FFFDF7] px-4 py-3
         text-[#3F5747]">
             {/* Title Box. Also links to dashboard */}
-            <span className="basis-1/4 border-8 border-double border-red p-2 rounded-lg text-center">
+            <span className="basis-1/4 p-2 text-center text-lg font-semibold">
                 <Link href={Pages.dashboard}>PocketLedger</Link>
             </span>
             {/* Navigation Box */}
-            <nav className="grow grid grid-cols-4 gap-4 text-center
-            border-8 border-double border-red p-2 rounded-lg">
-                <Link href={Pages.dashboard}>Dashboard</Link>
-                <Link href={Pages.accounts}>Accounts</Link>
-                <Link href={Pages.budgets}>Budgets</Link>
-                <Link href={Pages.import}>Import</Link>
-                <Link href={Pages.transactions} >Transactions</Link>
-                <Link href={Pages.settings}>Settings</Link>
-                <Link href={Pages.login}>Login</Link>
+            <nav className="w-full grow grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-sm">
+                <Link href={Pages.dashboard} className={linkClass}>Dashboard</Link>
+                <Link href={Pages.accounts} className={linkClass}>Accounts</Link>
+                <Link href={Pages.budgets} className={linkClass}>Budgets</Link>
+                <Link href={Pages.import} className={linkClass}>Import</Link>
+                <Link href={Pages.transactions} className={linkClass}>Transactions</Link>
+                <Link href={Pages.settings} className={linkClass}>Settings</Link>
+                <Link href={Pages.login} className={linkClass}>Login</Link>
             </nav>
         </div>
     );
