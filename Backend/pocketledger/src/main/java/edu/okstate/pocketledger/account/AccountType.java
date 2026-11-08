@@ -20,6 +20,6 @@ public enum AccountType {
 
     @JsonCreator
     public static AccountType fromJson(String value) {
-        return AccountType.valueOf(value.toUpperCase());
+        return AccountType.valueOf(value);
     }
 }
