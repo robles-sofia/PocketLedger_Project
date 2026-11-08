@@ -1,7 +1,12 @@
 package edu.okstate.pocketledger.category;
 
+import edu.okstate.pocketledger.user.User;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -10,7 +15,6 @@ import jakarta.persistence.Table;
 /*
  * Category.java
  * Maps rows in the table Category to a Java object.
- * Validates, does not create.
  */
 
 // validates
@@ -27,13 +31,19 @@ public class Category {
     @Column(name = "category_label", nullable = false, unique = true, length = 255)
     private String categoryLabel;
 
+    //User who owns the category
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     // Empty constructor for JPA
     protected Category() {
     }
 
     // Constructor with parameters
-    public Category(String categoryLabel){
+    public Category(String categoryLabel, User user){
         this.categoryLabel = categoryLabel;
+        this.user = user;
     }
 
     // accessor methods
@@ -43,5 +53,9 @@ public class Category {
 
     public String getCategoryLabel(){
         return categoryLabel;
+    }
+
+    public User getUser(){
+        return user;
     }
 }
