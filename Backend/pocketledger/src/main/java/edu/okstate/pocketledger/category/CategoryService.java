@@ -56,7 +56,7 @@ public class CategoryService{
         }
 
         //Check if the category already exists
-        if (categoryRepository.existsByUser_IdAndCategory(userId, categoryLabel)){
+        if (categoryRepository.existsByUser_IdAndCategoryLabel(userId, categoryLabel)){
             throw new IllegalArgumentException("Category already exists");
         }
 

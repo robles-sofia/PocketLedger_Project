@@ -40,11 +40,17 @@ CREATE TABLE account (
 
 CREATE TABLE category (
 	category_label VARCHAR(255) NOT NULL,
-    category_id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT
+    category_id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    user_id INT UNSIGNED NOT NULL,
+    CONSTRAINT FK_category_user_id
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
 );
-INSERT INTO category(category_label)
-VALUES ('Rent'), ('Utilities'), ('Bills'), ('Groceries'), ('Dining'), ('Entertainment'), ('Transportation'), ('Health and Wellness'), ('Shopping'), 
-		('Education'), ('Income'), ('Other');
+
+INSERT INTO user(user_id, email_address, credential, settings_json) VALUES (1, 'Default', 'default', '{}');
+
+INSERT INTO category(category_label, user_id)
+VALUES ('Rent', 1), ('Utilities', 1), ('Bills', 1), ('Groceries', 1), ('Dining', 1), ('Entertainment', 1), ('Transportation', 1), 
+		('Health and Wellness', 1), ('Shopping', 1), ('Education', 1), ('Income', 1), ('Other', 1);
 
 CREATE TABLE transaction(
 	account_id BIGINT UNSIGNED NOT NULL,
@@ -73,10 +79,13 @@ CREATE TABLE budget(
 
 CREATE TABLE budget_entry(
 -- Defines the components of a budget
+	budget_entry_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
 	budget_id BIGINT UNSIGNED NOT NULL,
     category INT UNSIGNED NOT NULL,
     allotted DECIMAL(22, 10) NOT NULL, -- This pessimistically assumes up to a trillion USD with extra precision for currency conversion.
-    PRIMARY KEY(budget_id, category),
+     
+	CONSTRAINT budget_entry_category_unique
+	UNIQUE(budget_id, category),
     CONSTRAINT FK_budget_entry_budget_id
     FOREIGN KEY (budget_id) REFERENCES budget(budget_id),
     CONSTRAINT FK_budget_entry_category
@@ -93,16 +102,16 @@ SHOW TABLES; -- Shows that tables exist
 
 
 
-
+/*
 -- Test stuff; delete later
-/*INSERT INTO user(email_address, credential)
-VALUES ('bob@hotmail.com', 'bobizcool');
+INSERT INTO user(email_address, credential, settings_json)
+VALUES ('bob@hotmail.com', 'bobizcool', '{}');
 
 SELECT * FROM user; -- Passes
 
-INSERT INTO account(user_id, account_name, account_type, settings_json)
-VALUES (1, 'Bob\'s checking', 'checking', '{}'),
-		(1, 'Bob\'s savings', 'savings', '{}');
+INSERT INTO account(user_id, account_name, account_type)
+VALUES (1, 'Bob\'s checking', 'checking'),
+		(1, 'Bob\'s savings', 'savings');
 
 SELECT * FROM account; -- Passes
 
@@ -113,16 +122,14 @@ VALUES (2, 100, 1, CURDATE() - 1);
 
 SELECT * FROM transaction; -- Passes
 
-INSERT INTO budget(month, account_id)
-VALUES ('2026-09-01', 1), ('2026-09-01', 2);
+INSERT INTO budget(month, user_id)
+VALUES ('2026-09-01', 1);
 
 SELECT * FROM budget; -- Passes
 
 INSERT INTO budget_entry(budget_id, category, allotted) VALUES 
 (1, 1, 50),
-(1, 2, 75),
-(2, 1, 0),
-(2, 2, 0);
+(1, 2, 75);
 
 SELECT * FROM budget_entry; -- Passes
 */

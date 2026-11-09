@@ -15,7 +15,7 @@ public enum AccountType {
     // translates between JSON and Java
     @JsonValue
     public String toJson() {
-        return name().toLowerCase();
+        return name();
     }
 
     @JsonCreator
