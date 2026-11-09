@@ -2,16 +2,17 @@ package edu.okstate.pocketledger.category;
 
 import java.util.List;
 
-import org.springframework.stereotype.Service;
-
-import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
 
 import edu.okstate.pocketledger.user.User;
 import edu.okstate.pocketledger.user.UserRepository;
 
 @Service
 public class CategoryService{
+
+    //Constant for default userID for default categories
+    private static final Integer DEFAULT_USER_ID = 1;
 
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
@@ -23,7 +24,7 @@ public class CategoryService{
 
     //Retrieve all categories belonging to the user
     public List<Category> getAllCategories(Integer userId){
-        return categoryRepository.findByUser_Id(userId);
+        return categoryRepository.findByUser_IdIn(List.of(DEFAULT_USER_ID, userId).stream().distinct().toList());
     }
 
     //Retrieve a category by it's ID, make sure the current user is the owner
@@ -31,7 +32,8 @@ public class CategoryService{
         Category category = categoryRepository.findById(categoryId).orElseThrow(() ->
         new IllegalArgumentException("Category not found"));
 
-        if (!category.getUser().getId().equals(userId)){
+        if (!category.getUser().getId().equals(userId)
+        && !category.getUser().getId().equals(DEFAULT_USER_ID)){
             throw new AccessDeniedException(
                 "User does not have access to this category"
             );
