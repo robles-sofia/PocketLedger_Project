@@ -4,10 +4,26 @@ import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { mockRegister } from "../../mocks";
 import {saveToken} from "../../lib/auth";
+import { apiFetch } from "../../lib/api";
 const BACKEND_URL = "http://localhost:8080";
 const USE_MOCK = false; // Register uses the real backend now
 const grainTexture =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"; 
+
+//Create a default account for a new user, so they can add transactions right away
+async function createDefaultAccount() {
+  try {
+    //The backend requires settings, but does not use it yet, so send "{}"
+    await apiFetch("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({ name: "Main Account", type: "checking", settings: "{}" }),
+      redirectOn401: false, //Do not jump to the login page here
+    });
+  } catch {
+    //If this fails, the user can still create an account on the Accounts page
+    console.log("Could not create the default account.");
+  }
+}
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -56,6 +72,7 @@ export default function RegisterPage() {
       }
       const data = await res.json();
       saveToken(data.token); //Log the user in right after signing up
+      await createDefaultAccount(); //Give the new user a default account
       window.location.href = "/";
     } catch {
       setError("Could not reach the server. Is the backend running?");
