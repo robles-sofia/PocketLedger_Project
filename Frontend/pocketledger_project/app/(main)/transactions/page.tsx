@@ -1,5 +1,6 @@
 "use client";
 import {useEffect, useMemo, useState} from "react";
+import Link from "next/link";
 import { Plus, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError, checkBackendConnection} from "../../../lib/api";
@@ -250,7 +251,14 @@ export default function TransactionsPage() {
           {loading && <p className="p-6 text-sm text-[#7A8580]">Loading…</p>}
           {loadError && <p className="p-6 text-sm text-[#B5574B]">{loadError}</p>}
           {noAccounts && (
-            <p className="p-6 text-sm text-[#7A8580]">You don&apos;t have any accounts yet. Create an account first to add transactions.</p>
+            <p className="p-6 text-sm text-[#7A8580]">
+              You don&apos;t have any accounts yet.{" "}
+              {/* Link to the Accounts page */}
+              <Link href="/accounts" className="font-medium text-[#3F5747] underline hover:text-[#3E8E5A]">
+                Create an account first
+              </Link>{" "}
+              to add transactions.
+            </p>
           )}
           {!loading && !loadError && !noAccounts && visible.length === 0 && (
             <p className="p-6 text-sm text-[#7A8580]">No transactions yet.</p>
