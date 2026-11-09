@@ -93,7 +93,7 @@ public class CategoryServiceTest {
         when(userRepository.findById(1))
             .thenReturn(Optional.of(user));
 
-        when(categoryRepository.existsByUser_IdAndCategory(
+        when(categoryRepository.existsByUser_IdAndCategoryLabel(
             1, "Groceries"
         )).thenReturn(false);
 
@@ -123,7 +123,7 @@ public class CategoryServiceTest {
             new CategoryService(categoryRepository, userRepository);
 
         // User 1 already has a Groceries category
-        when(categoryRepository.existsByUser_IdAndCategory(
+        when(categoryRepository.existsByUser_IdAndCategoryLabel(
             1, "Groceries"
         )).thenReturn(true);
 

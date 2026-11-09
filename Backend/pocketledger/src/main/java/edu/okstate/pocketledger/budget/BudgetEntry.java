@@ -21,7 +21,7 @@ public class BudgetEntry {
     
     @Id 
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "entry_id")
+    @Column(name = "budget_entry_id")
     private Long id;
 
     @ManyToOne
