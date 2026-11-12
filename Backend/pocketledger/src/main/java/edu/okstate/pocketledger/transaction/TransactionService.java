@@ -10,6 +10,8 @@ import edu.okstate.pocketledger.category.Category;
 import edu.okstate.pocketledger.category.CategoryRepository;
 import edu.okstate.pocketledger.common.NotFoundException;
 
+import org.springframework.security.access.AccessDeniedException;
+
 @Service
 public class TransactionService{
     private final TransactionRepository transactionRepository;
@@ -61,6 +63,13 @@ public class TransactionService{
         //Find the category associated with the transaction
         Category category = categoryRepository.findById(request.categoryId())
             .orElseThrow(() -> new IllegalArgumentException("Category not found"));
+
+        //Define the catgory owner Id
+        Integer categoryOwnerId = category.getUser().getId();
+
+        if (!categoryOwnerId.equals(userId) && !categoryOwnerId.equals(1)) {
+            throw new AccessDeniedException("User does not have access to this category");
+        }
 
         //Create the new transaction
         Transaction transaction = new Transaction(
