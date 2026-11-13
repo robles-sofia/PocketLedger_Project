@@ -1,5 +1,26 @@
 "use client";
 
+import { NextReactP5Wrapper } from "@p5-wrapper/next";
+import { type Sketch } from "@p5-wrapper/react";
+import React from "react";
+
+const sketch: Sketch = (p5) => {
+  p5.setup = () => {
+    p5.createCanvas(600, 400, p5.WEBGL);
+  };
+
+  p5.draw = () => {
+    p5.background(250);
+    p5.normalMaterial();
+    p5.push();
+    p5.rotateZ(p5.frameCount * 0.01);
+    p5.rotateX(p5.frameCount * 0.01);
+    p5.rotateY(p5.frameCount * 0.01);
+    p5.plane(100);
+    p5.pop();
+  };
+};
+
 const BACKEND_URL = "http://localhost:8080";
 const USE_MOCK = true; //Use mock login for now, change to false when OAuth is ready
 
@@ -27,15 +48,15 @@ export default function DashboardPage() {
     return (
         
             <main className="grid grow grid-flow-col grid-cols-6 grid-rows-6 gap-6 p-8 
-            border-2 border-double border-indigo-300
-            bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% px-4 py-8 md:px-10">
+            border-2 border-double border-black-300
+            relative min-h-screen bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% px-4 py-8 md:px-10">
                 {/* Background grid */}
                 <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(#9BB5A3_1px,transparent_1px),linear-gradient(90deg,#9BB5A3_1px,transparent_1px)] [background-size:32px_32px]" />
 
                 
 
                 {/* Box 2 */}
-                <div className="col-span-2 row-span-4 border-8 border-double border-indigo-300 
+                <div className="col-span-2 row-span-4 border-8 border-double border-black-300 
                 flex flex-col justify-center gap-8 text-black">
                     <button 
                         onClick={() =>pageTransition("/accounts")} 
@@ -65,13 +86,9 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Box 3 */}
-                <div className="col-span-4 row-span-4 border-8 border-double border-indigo-300 text-black">
+                <div className="col-span-4 row-span-4 border-8 border-double border-black-300 text-black">
                     <div className="flex items-center justify-center w-full h-full">
-                    <button 
-                        onClick={handleLogin} 
-                        className="justify-centermt-8 w-full rounded-lg border border-[#CFE0CF] bg-[#EEF5EC] py-4 font-medium text-[#3F5747] transition hover:-translate-y-0.5 hover:bg-[#E4EFE3] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A9C9B0]" >
-                        Chart / Graph / Data Visualization Preview
-                    </button> 
+                    <NextReactP5Wrapper sketch={sketch} />;
                     </div>
                 </div>
             </main>
