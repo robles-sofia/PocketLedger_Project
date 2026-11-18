@@ -655,6 +655,12 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
       return;
     }
 
+    //Check that the label is not empty
+    if (label.trim() === "") {
+      setError("Enter a label.");
+      return;
+    }
+
     //Check that a category is selected
     if (categoryId === 0) {
       setError("Choose a category.");
@@ -665,7 +671,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
     const signed = (kind === "expense" ? -value : value).toFixed(2);
 
     //Create the transaction data to send
-    const body = { date, amount: signed, label, description, categoryId, accountId };
+    const body = { date, amount: signed, label: label.trim(), description, categoryId, accountId };
 
     //Add a transaction using mock data
     if (USE_MOCK) {
@@ -753,6 +759,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
           <label htmlFor="label" className="text-sm text-[#4F6657]">Label</label>
           <input
             id="label"
+            required
             maxLength={255}
             placeholder="e.g. Walmart"
             value={label}
