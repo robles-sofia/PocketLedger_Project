@@ -2,7 +2,7 @@
 import { Plus, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import {mockTransactions, mockCategories, mockAccounts, mockBudget} from "../../../mocks";
-import {apiFetch, ApiRequestError, checkBackendConnection} from "../../../lib/api";
+import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, MonthlyBudget } from "../../../types/api";
 const USE_MOCK = false; 
 
