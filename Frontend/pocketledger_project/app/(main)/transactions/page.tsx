@@ -1,7 +1,7 @@
 "use client";
 import {useEffect, useMemo, useState} from "react";
 import Link from "next/link";
-import { Plus, X } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, Category } from "../../../types/api";
@@ -120,6 +120,19 @@ function today() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+//One result from POST /api/ai/categorize.
+//source is "ai" when Gemini picked a category, "default" when it fell back to Other
+interface CategorizeResult {
+  id: number;
+  categoryId: number;
+  source: string;
+}
+
+//Data returned by POST /api/ai/categorize
+interface CategorizeResponse {
+  results: CategorizeResult[];
+}
+
 //Data returned by GET /api/settings
 interface SettingsResponse {
   currency: string;
@@ -168,6 +181,11 @@ export default function TransactionsPage() {
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
 
+  //Store the AI auto-categorize state
+  const [categorizing, setCategorizing] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiError, setAiError] = useState("");
+
   //Find accounts by their ID
   const accountById = new Map<number, Account>();
   for (const account of accounts) {
@@ -192,6 +210,84 @@ export default function TransactionsPage() {
       return account.currency;
     }
     return "USD";
+  }
+
+  //Ask the AI to pick categories for the shown transactions that are still in "Other"
+  async function handleAutoCategorize() {
+    setAiMessage("");
+    setAiError("");
+
+    //Find the transactions in the "Other" category 
+    const ids: number[] = [];
+    for (const r of rows) {
+      if (accountFilter !== "all" && r.accountId !== accountFilter) {
+        continue;
+      }
+      const category = categoryById.get(r.categoryId);
+      if (category && category.name === "Other") {
+        ids.push(r.id);
+      }
+    }
+
+    if (ids.length === 0) {
+      setAiMessage("There are no transactions in Other to categorize.");
+      return;
+    }
+
+    setCategorizing(true);
+    try {
+      const data = await apiFetch<CategorizeResponse>("/api/ai/categorize", {
+        method: "POST",
+        body: JSON.stringify({ transactionIds: ids }),
+      });
+
+      //Save the new category of each transaction
+      const newCategoryById = new Map<number, number>();
+      let aiCount = 0;
+      for (const result of data.results) {
+        newCategoryById.set(result.id, result.categoryId);
+        if (result.source === "ai" && result.categoryId !== 0) {
+          const category = categoryById.get(result.categoryId);
+          //Only count it if the AI moved it out of Other
+          if (!category || category.name !== "Other") {
+            aiCount++;
+          }
+        }
+      }
+
+      //Update the list so the new categories show right away
+      setRows((prev) => {
+        const updated: Row[] = [];
+        for (const row of prev) {
+          const newCategoryId = newCategoryById.get(row.id);
+          if (newCategoryId === undefined) {
+            updated.push(row);
+          } else {
+            updated.push({ ...row, categoryId: newCategoryId });
+          }
+        }
+        return updated;
+      });
+
+      //Tell the user how many transactions got a new category
+      const total = ids.length;
+      if (aiCount === 0) {
+        setAiMessage("The AI couldn't find a better category for these transactions. They stay in Other.");
+      } else if (aiCount === 1) {
+        setAiMessage("AI moved 1 of " + total + " transactions out of Other.");
+      } else {
+        setAiMessage("AI moved " + aiCount + " of " + total + " transactions out of Other.");
+      }
+    } catch (e) {
+      //Show an error if the request fails
+      if (e instanceof ApiRequestError) {
+        setAiError(e.message);
+      } else {
+        setAiError("Could not auto-categorize. Please try again.");
+      }
+    } finally {
+      setCategorizing(false);
+    }
   }
 
   //Change a transaction amount into the home currency.
@@ -425,6 +521,16 @@ export default function TransactionsPage() {
               ))}
             </select>
 
+            {/* Let the AI pick categories for transactions in "Other" */}
+            <button
+              onClick={handleAutoCategorize}
+              disabled={categorizing || loading || rows.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-[#CFE0CF] bg-white px-4 py-2 font-medium text-[#3F5747] transition hover:-translate-y-0.5 hover:bg-[#F6FAF5] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+            >
+              <Sparkles className="h-4 w-4" />
+              {categorizing ? "Categorizing…" : "Auto-categorize"}
+            </button>
+
             {/* Open the add transaction form (needs at least one account) */}
             <button
               onClick={() => setShowForm(true)}
@@ -435,6 +541,10 @@ export default function TransactionsPage() {
             </button>
           </div>
         </div>
+
+        {/* Result of auto-categorize */}
+        {aiMessage !== "" && <p className="mt-4 text-sm text-[#3E8E5A]">{aiMessage}</p>}
+        {aiError !== "" && <p className="mt-4 text-sm text-[#B5574B]">{aiError}</p>}
 
         {/* Total income and spending cards */}
         <div className="mt-6 grid grid-cols-2 gap-4">
