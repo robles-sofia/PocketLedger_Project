@@ -185,6 +185,7 @@ export default function TransactionsPage() {
   const [categorizing, setCategorizing] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [aiError, setAiError] = useState("");
+  const [categorizingId, setCategorizingId] = useState(0); //Which row's AI is working (0 = none)
 
   //Find accounts by their ID
   const accountById = new Map<number, Account>();
@@ -212,12 +213,12 @@ export default function TransactionsPage() {
     return "USD";
   }
 
-  //Ask the AI to pick categories for the shown transactions that are still in "Other"
+  //Big button: ask the AI to pick categories for the shown transactions that are still in "Other"
   async function handleAutoCategorize() {
     setAiMessage("");
     setAiError("");
 
-    //Find the transactions in the "Other" category 
+    //Find the transactions in the "Other" category, only for the account picked in the filter
     const ids: number[] = [];
     for (const r of rows) {
       if (accountFilter !== "all" && r.accountId !== accountFilter) {
@@ -234,6 +235,76 @@ export default function TransactionsPage() {
       return;
     }
 
+    const results = await sendToAi(ids);
+    if (results === null) {
+      return;
+    }
+
+    //Count how many the AI moved out of Other
+    let aiCount = 0;
+    for (const result of results) {
+      if (movedOutOfOther(result)) {
+        aiCount++;
+      }
+    }
+
+    //Tell the user how many transactions got a new category
+    const total = ids.length;
+    if (aiCount === 0) {
+      setAiMessage("The AI couldn't find a better category for these transactions. They stay in Other.");
+    } else if (aiCount === 1) {
+      setAiMessage("AI moved 1 of " + total + " transactions out of Other.");
+    } else {
+      setAiMessage("AI moved " + aiCount + " of " + total + " transactions out of Other.");
+    }
+  }
+
+  //Small button on one row: ask the AI to pick a category for just this transaction
+  async function handleCategorizeOne(row: Row) {
+    setAiMessage("");
+    setAiError("");
+    setCategorizingId(row.id);
+
+    const results = await sendToAi([row.id]);
+    setCategorizingId(0);
+    if (results === null || results.length === 0) {
+      return;
+    }
+
+    //Use the label in the message, so the user knows which transaction it was
+    let name = row.label;
+    if (name === "") {
+      name = "this transaction";
+    }
+
+    const result = results[0];
+    if (movedOutOfOther(result)) {
+      let newName = "a new category";
+      const category = categoryById.get(result.categoryId);
+      if (category) {
+        newName = category.name;
+      }
+      setAiMessage("AI moved \"" + name + "\" to " + newName + ".");
+    } else {
+      setAiMessage("The AI couldn't pick a category for \"" + name + "\". It stays in Other.");
+    }
+  }
+
+  //Check if the AI picked a real category (not Other)
+  function movedOutOfOther(result: CategorizeResult) {
+    if (result.source !== "ai" || result.categoryId === 0) {
+      return false;
+    }
+    const category = categoryById.get(result.categoryId);
+    if (category && category.name === "Other") {
+      return false;
+    }
+    return true;
+  }
+
+  //Send transaction IDs to the AI and update their categories in the list.
+  //Returns the results, or null if the request failed
+  async function sendToAi(ids: number[]) {
     setCategorizing(true);
     try {
       const data = await apiFetch<CategorizeResponse>("/api/ai/categorize", {
@@ -243,16 +314,8 @@ export default function TransactionsPage() {
 
       //Save the new category of each transaction
       const newCategoryById = new Map<number, number>();
-      let aiCount = 0;
       for (const result of data.results) {
         newCategoryById.set(result.id, result.categoryId);
-        if (result.source === "ai" && result.categoryId !== 0) {
-          const category = categoryById.get(result.categoryId);
-          //Only count it if the AI moved it out of Other
-          if (!category || category.name !== "Other") {
-            aiCount++;
-          }
-        }
       }
 
       //Update the list so the new categories show right away
@@ -269,15 +332,7 @@ export default function TransactionsPage() {
         return updated;
       });
 
-      //Tell the user how many transactions got a new category
-      const total = ids.length;
-      if (aiCount === 0) {
-        setAiMessage("The AI couldn't find a better category for these transactions. They stay in Other.");
-      } else if (aiCount === 1) {
-        setAiMessage("AI moved 1 of " + total + " transactions out of Other.");
-      } else {
-        setAiMessage("AI moved " + aiCount + " of " + total + " transactions out of Other.");
-      }
+      return data.results;
     } catch (e) {
       //Show an error if the request fails
       if (e instanceof ApiRequestError) {
@@ -285,6 +340,7 @@ export default function TransactionsPage() {
       } else {
         setAiError("Could not auto-categorize. Please try again.");
       }
+      return null;
     } finally {
       setCategorizing(false);
     }
@@ -611,6 +667,12 @@ export default function TransactionsPage() {
                   convertedText = "≈ " + formatMoney(converted, homeCurrency);
                 }
 
+                //Make the icon blink while the AI works on this row
+                let sparkleClass = "h-4 w-4";
+                if (categorizingId === r.id) {
+                  sparkleClass = "h-4 w-4 animate-pulse";
+                }
+
                 return (
                   <li key={r.id} className="flex items-center gap-4 px-5 py-3">
                     {/* Transaction date */}
@@ -633,6 +695,22 @@ export default function TransactionsPage() {
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: categoryColor }} />
                       {categoryName}
                     </span>
+
+                    {/* Small AI button, only for transactions in Other. Other rows get an empty space so they line up */}
+                    <div className="hidden w-7 shrink-0 sm:block">
+                      {categoryName === "Other" && (
+                        <button
+                          type="button"
+                          onClick={() => handleCategorizeOne(r)}
+                          disabled={categorizing}
+                          title="Let AI pick a category"
+                          aria-label={"Let AI pick a category for " + (r.label || "this transaction")}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#5E8A6B] hover:bg-[#EEF5EC] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Sparkles className={sparkleClass} />
+                        </button>
+                      )}
+                    </div>
 
                     {/* Transaction amount, green for income and red for expense */}
                     <div className="w-28 shrink-0 text-right">
