@@ -4,9 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashMap;
 
 import org.springframework.stereotype.Service; 
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +52,7 @@ public class BudgetService {
         LocalDate firstDay = yearMonth.atDay(1);
         LocalDate lastDay = yearMonth.atEndOfMonth();
 
-        // planed amounts, empty list if no budget set for this month yet
+        // planned amounts, empty list if no budget set for this month yet
         List<BudgetEntry> entries = 
         budgetRepository.findByUser_IdAndMonth(userId, firstDay).map(budget -> budgetEntryRepository.findByBudget_Id(budget.getId()))
         .orElse(List.of());
@@ -77,8 +77,9 @@ public class BudgetService {
         Budget budget = budgetRepository.findByUser_IdAndMonth(userId, firstDay).orElseGet(() -> budgetRepository.save(new Budget(firstDay, user)));
 
 
-        // clear old lines and write new ones
+        // clear old lines and write new ones. Flush deletes before writing to avoid error.
         budgetEntryRepository.deleteAll(budgetEntryRepository.findByBudget_Id(budget.getId()));
+        budgetEntryRepository.flush();
 
         List<BudgetEntry> entries = new ArrayList<>();
 
@@ -108,6 +109,10 @@ public class BudgetService {
             Map<Integer, String> categoryNames = new LinkedHashMap<>();
 
             for (Transaction transaction : transactions) {
+                if (transaction.getCategory().getCategoryLabel().equals("Income")) {
+                    continue; // skip income category
+                }
+                
                 Integer categoryId = transaction.getCategory().getId();
 
                 // store name
