@@ -52,7 +52,7 @@ public class BudgetService {
         LocalDate firstDay = yearMonth.atDay(1);
         LocalDate lastDay = yearMonth.atEndOfMonth();
 
-        // planed amounts, empty list if no budget set for this month yet
+        // planned amounts, empty list if no budget set for this month yet
         List<BudgetEntry> entries = 
         budgetRepository.findByUser_IdAndMonth(userId, firstDay).map(budget -> budgetEntryRepository.findByBudget_Id(budget.getId()))
         .orElse(List.of());
