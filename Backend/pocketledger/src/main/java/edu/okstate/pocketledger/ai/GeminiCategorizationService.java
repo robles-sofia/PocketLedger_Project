@@ -77,7 +77,7 @@ public class GeminiCategorizationService{
 
         //Error for it gemini returns a blank response
         if (answer == null || answer.isBlank()){
-            throw new IllegalStateException("Gemini return a blank response");
+            throw new IllegalStateException("Gemini returned a blank response");
         }
 
         //Convert the reponse into a category ID
@@ -86,7 +86,7 @@ public class GeminiCategorizationService{
         try {
             selectedId = Integer.valueOf(answer.trim());
         } catch (NumberFormatException exception){
-            throw new IllegalStateException("Gemini return an invalid category ID", exception);
+            throw new IllegalStateException("Gemini returned an invalid category ID", exception);
         }
 
         //Verify that the category belongs to the list
