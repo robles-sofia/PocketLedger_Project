@@ -4,9 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashMap;
 
 import org.springframework.stereotype.Service; 
 import org.springframework.transaction.annotation.Transactional;
@@ -109,6 +109,10 @@ public class BudgetService {
             Map<Integer, String> categoryNames = new LinkedHashMap<>();
 
             for (Transaction transaction : transactions) {
+                if (transaction.getCategory().getCategoryLabel().equals("Income")) {
+                    continue; // skip income category
+                }
+                
                 Integer categoryId = transaction.getCategory().getId();
 
                 // store name
