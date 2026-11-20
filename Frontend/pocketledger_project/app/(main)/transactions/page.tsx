@@ -1,7 +1,7 @@
 "use client";
 import {useEffect, useMemo, useState} from "react";
 import Link from "next/link";
-import { Plus, X } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, Category } from "../../../types/api";
@@ -120,6 +120,19 @@ function today() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+//One result from POST /api/ai/categorize.
+//source is "ai" when Gemini picked a category, "default" when it fell back to Other
+interface CategorizeResult {
+  id: number;
+  categoryId: number;
+  source: string;
+}
+
+//Data returned by POST /api/ai/categorize
+interface CategorizeResponse {
+  results: CategorizeResult[];
+}
+
 //Data returned by GET /api/settings
 interface SettingsResponse {
   currency: string;
@@ -168,6 +181,12 @@ export default function TransactionsPage() {
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
 
+  //Store the AI auto-categorize state
+  const [categorizing, setCategorizing] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiError, setAiError] = useState("");
+  const [categorizingId, setCategorizingId] = useState(0); //Which row's AI is working (0 = none)
+
   //Find accounts by their ID
   const accountById = new Map<number, Account>();
   for (const account of accounts) {
@@ -192,6 +211,139 @@ export default function TransactionsPage() {
       return account.currency;
     }
     return "USD";
+  }
+
+  //Big button: ask the AI to pick categories for the shown transactions that are still in "Other"
+  async function handleAutoCategorize() {
+    setAiMessage("");
+    setAiError("");
+
+    //Find the transactions in the "Other" category, only for the account picked in the filter
+    const ids: number[] = [];
+    for (const r of rows) {
+      if (accountFilter !== "all" && r.accountId !== accountFilter) {
+        continue;
+      }
+      const category = categoryById.get(r.categoryId);
+      if (category && category.name === "Other") {
+        ids.push(r.id);
+      }
+    }
+
+    if (ids.length === 0) {
+      setAiMessage("There are no transactions in Other to categorize.");
+      return;
+    }
+
+    const results = await sendToAi(ids);
+    if (results === null) {
+      return;
+    }
+
+    //Count how many the AI moved out of Other
+    let aiCount = 0;
+    for (const result of results) {
+      if (movedOutOfOther(result)) {
+        aiCount++;
+      }
+    }
+
+    //Tell the user how many transactions got a new category
+    const total = ids.length;
+    if (aiCount === 0) {
+      setAiMessage("The AI couldn't find a better category for these transactions. They stay in Other.");
+    } else if (aiCount === 1) {
+      setAiMessage("AI moved 1 of " + total + " transactions out of Other.");
+    } else {
+      setAiMessage("AI moved " + aiCount + " of " + total + " transactions out of Other.");
+    }
+  }
+
+  //Small button on one row: ask the AI to pick a category for just this transaction
+  async function handleCategorizeOne(row: Row) {
+    setAiMessage("");
+    setAiError("");
+    setCategorizingId(row.id);
+
+    const results = await sendToAi([row.id]);
+    setCategorizingId(0);
+    if (results === null || results.length === 0) {
+      return;
+    }
+
+    //Use the label in the message, so the user knows which transaction it was
+    let name = row.label;
+    if (name === "") {
+      name = "this transaction";
+    }
+
+    const result = results[0];
+    if (movedOutOfOther(result)) {
+      let newName = "a new category";
+      const category = categoryById.get(result.categoryId);
+      if (category) {
+        newName = category.name;
+      }
+      setAiMessage("AI moved \"" + name + "\" to " + newName + ".");
+    } else {
+      setAiMessage("The AI couldn't pick a category for \"" + name + "\". It stays in Other.");
+    }
+  }
+
+  //Check if the AI picked a real category (not Other)
+  function movedOutOfOther(result: CategorizeResult) {
+    if (result.source !== "ai" || result.categoryId === 0) {
+      return false;
+    }
+    const category = categoryById.get(result.categoryId);
+    if (category && category.name === "Other") {
+      return false;
+    }
+    return true;
+  }
+
+  //Send transaction IDs to the AI and update their categories in the list.
+  //Returns the results, or null if the request failed
+  async function sendToAi(ids: number[]) {
+    setCategorizing(true);
+    try {
+      const data = await apiFetch<CategorizeResponse>("/api/ai/categorize", {
+        method: "POST",
+        body: JSON.stringify({ transactionIds: ids }),
+      });
+
+      //Save the new category of each transaction
+      const newCategoryById = new Map<number, number>();
+      for (const result of data.results) {
+        newCategoryById.set(result.id, result.categoryId);
+      }
+
+      //Update the list so the new categories show right away
+      setRows((prev) => {
+        const updated: Row[] = [];
+        for (const row of prev) {
+          const newCategoryId = newCategoryById.get(row.id);
+          if (newCategoryId === undefined) {
+            updated.push(row);
+          } else {
+            updated.push({ ...row, categoryId: newCategoryId });
+          }
+        }
+        return updated;
+      });
+
+      return data.results;
+    } catch (e) {
+      //Show an error if the request fails
+      if (e instanceof ApiRequestError) {
+        setAiError(e.message);
+      } else {
+        setAiError("Could not auto-categorize. Please try again.");
+      }
+      return null;
+    } finally {
+      setCategorizing(false);
+    }
   }
 
   //Change a transaction amount into the home currency.
@@ -425,6 +577,16 @@ export default function TransactionsPage() {
               ))}
             </select>
 
+            {/* Let the AI pick categories for transactions in "Other" */}
+            <button
+              onClick={handleAutoCategorize}
+              disabled={categorizing || loading || rows.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-[#CFE0CF] bg-white px-4 py-2 font-medium text-[#3F5747] transition hover:-translate-y-0.5 hover:bg-[#F6FAF5] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+            >
+              <Sparkles className="h-4 w-4" />
+              {categorizing ? "Categorizing…" : "Auto-categorize"}
+            </button>
+
             {/* Open the add transaction form (needs at least one account) */}
             <button
               onClick={() => setShowForm(true)}
@@ -435,6 +597,10 @@ export default function TransactionsPage() {
             </button>
           </div>
         </div>
+
+        {/* Result of auto-categorize */}
+        {aiMessage !== "" && <p className="mt-4 text-sm text-[#3E8E5A]">{aiMessage}</p>}
+        {aiError !== "" && <p className="mt-4 text-sm text-[#B5574B]">{aiError}</p>}
 
         {/* Total income and spending cards */}
         <div className="mt-6 grid grid-cols-2 gap-4">
@@ -501,6 +667,12 @@ export default function TransactionsPage() {
                   convertedText = "≈ " + formatMoney(converted, homeCurrency);
                 }
 
+                //Make the icon blink while the AI works on this row
+                let sparkleClass = "h-4 w-4";
+                if (categorizingId === r.id) {
+                  sparkleClass = "h-4 w-4 animate-pulse";
+                }
+
                 return (
                   <li key={r.id} className="flex items-center gap-4 px-5 py-3">
                     {/* Transaction date */}
@@ -523,6 +695,22 @@ export default function TransactionsPage() {
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: categoryColor }} />
                       {categoryName}
                     </span>
+
+                    {/* Small AI button, only for transactions in Other. Other rows get an empty space so they line up */}
+                    <div className="hidden w-7 shrink-0 sm:block">
+                      {categoryName === "Other" && (
+                        <button
+                          type="button"
+                          onClick={() => handleCategorizeOne(r)}
+                          disabled={categorizing}
+                          title="Let AI pick a category"
+                          aria-label={"Let AI pick a category for " + (r.label || "this transaction")}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#5E8A6B] hover:bg-[#EEF5EC] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Sparkles className={sparkleClass} />
+                        </button>
+                      )}
+                    </div>
 
                     {/* Transaction amount, green for income and red for expense */}
                     <div className="w-28 shrink-0 text-right">
@@ -658,6 +846,12 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
       return;
     }
 
+    //Check that the label is not empty
+    if (label.trim() === "") {
+      setError("Enter a label.");
+      return;
+    }
+
     //Check that a category is selected
     if (categoryId === 0) {
       setError("Choose a category.");
@@ -668,7 +862,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
     const signed = (kind === "expense" ? -value : value).toFixed(2);
 
     //Create the transaction data to send
-    const body = { date, amount: signed, label, description, categoryId, accountId };
+    const body = { date, amount: signed, label: label.trim(), description, categoryId, accountId };
 
     //Add a transaction using mock data
     if (USE_MOCK) {
@@ -756,6 +950,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
           <label htmlFor="label" className="text-sm text-[#4F6657]">Label</label>
           <input
             id="label"
+            required
             maxLength={255}
             placeholder="e.g. Walmart"
             value={label}
