@@ -96,10 +96,6 @@ public class BudgetService {
         return buildResponse(request.month(), entries, transactions);
     }
 
-
-
-
-
         // shared by both endpoints so response format looks the same
         private BudgetResponse buildResponse(String month, List<BudgetEntry> entries, List<Transaction> transactions) {
 
@@ -124,6 +120,11 @@ public class BudgetService {
             // planned, one entry per category user set an amount for
             Map<Integer, BigDecimal> plannedByCategory = new LinkedHashMap<>();
             for (BudgetEntry entry : entries) {
+
+                if(entry.getCategory().getCategoryLabel().equals("Income")){
+                    continue; //Exclude income
+                }
+                
                 Integer categoryId = entry.getCategory().getId();
 
                 // picks up names for cateogries budgeted for but never spent in
