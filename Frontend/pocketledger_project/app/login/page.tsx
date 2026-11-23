@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Wallet, Globe, Sparkles, PieChart } from "lucide-react";
 import {mockLogin} from "../../mocks";
 import {saveToken} from "../../lib/auth";
-const BACKEND_URL = "http://localhost:8080";
+import { BACKEND_URL } from "../../lib/api"; 
 const USE_MOCK = false; //Login uses the real backend now. 
 const features = [
   { icon: Globe, text: "Track spending in any currency" },
