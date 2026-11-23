@@ -12,6 +12,7 @@
     "concurrently": "^10.0.7",
     "lucide-react": "^1.47.0",
     "next": "^16.4.6",
+    "p5": "^2.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
