@@ -4,8 +4,7 @@ import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { mockRegister } from "../../mocks";
 import {saveToken} from "../../lib/auth";
-import { apiFetch } from "../../lib/api";
-const BACKEND_URL = "http://localhost:8080";
+import { apiFetch, BACKEND_URL } from "../../lib/api"; 
 const USE_MOCK = false; // Register uses the real backend now
 const grainTexture =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"; 
