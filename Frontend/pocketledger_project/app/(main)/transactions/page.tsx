@@ -384,6 +384,20 @@ export default function TransactionsPage() {
     }
   }
 
+  // Reload one account's transactions after a CSV import.
+  async function refreshImportedAccount(accountId: number) {
+    const data = await apiFetch<BackendTransaction[] | { transactions: BackendTransaction[] }>(
+      `/api/transactions?accountId=${accountId}`
+    );
+    const transactions = Array.isArray(data) ? data : data.transactions;
+    const importedRows = transactions.map(fromBackend);
+
+    setRows((previous) => [
+      ...previous.filter((row) => row.accountId !== accountId),
+      ...importedRows,
+    ]);
+  }
+
   //Change a transaction amount into the home currency.
   //Returns null if we don't have the exchange rate yet
   function toHomeCurrency(row: Row) {
@@ -600,7 +614,10 @@ export default function TransactionsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <CsvButton />
+            <CsvButton
+              accountId={accountFilter === "all" ? null : accountFilter}
+              onImported={refreshImportedAccount}
+            />
 
             {/* Choose which account to show */}
             <select
