@@ -1,7 +1,7 @@
 "use client";
 import {useEffect, useMemo, useState} from "react";
 import Link from "next/link";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Plus, Sparkles, Trash2, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, Category } from "../../../types/api";
@@ -181,6 +181,11 @@ export default function TransactionsPage() {
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
 
+  //Store the delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState(0); 
+  const [deletingId, setDeletingId] = useState(0); 
+  const [deleteError, setDeleteError] = useState("");
+
   //Store the AI auto-categorize state
   const [categorizing, setCategorizing] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
@@ -256,6 +261,36 @@ export default function TransactionsPage() {
       setAiMessage("AI moved 1 of " + total + " transactions out of Other.");
     } else {
       setAiMessage("AI moved " + aiCount + " of " + total + " transactions out of Other.");
+    }
+  }
+
+  //Delete one transaction after the user clicks "Yes"
+  async function handleDelete(row: Row) {
+    setDeleteError("");
+    setDeletingId(row.id);
+    try {
+      await apiFetch(`/api/transactions/${row.id}`, { method: "POST" });
+
+      //Remove it from the list
+      setRows((prev) => {
+        const kept: Row[] = [];
+        for (const r of prev) {
+          if (r.id !== row.id) {
+            kept.push(r);
+          }
+        }
+        return kept;
+      });
+      setConfirmDeleteId(0);
+    } catch (e) {
+      //Show an error if the transaction cannot be deleted
+      if (e instanceof ApiRequestError) {
+        setDeleteError(e.message);
+      } else {
+        setDeleteError("Could not delete the transaction.");
+      }
+    } finally {
+      setDeletingId(0);
     }
   }
 
@@ -601,6 +636,7 @@ export default function TransactionsPage() {
         {/* Result of auto-categorize */}
         {aiMessage !== "" && <p className="mt-4 text-sm text-[#3E8E5A]">{aiMessage}</p>}
         {aiError !== "" && <p className="mt-4 text-sm text-[#B5574B]">{aiError}</p>}
+        {deleteError !== "" && <p className="mt-4 text-sm text-[#B5574B]">{deleteError}</p>}
 
         {/* Total income and spending cards */}
         <div className="mt-6 grid grid-cols-2 gap-4">
@@ -725,6 +761,44 @@ export default function TransactionsPage() {
                       {/* Also show the amount in the home currency if it is different */}
                       {convertedText !== "" && (
                         <p className="text-xs tabular-nums text-[#7A8580]">{convertedText}</p>
+                      )}
+                    </div>
+
+                    {/* Delete button. After clicking it, ask "Delete?" with Yes / No */}
+                    <div className="flex w-24 shrink-0 items-center justify-end gap-1">
+                      {confirmDeleteId === r.id && (
+                        <>
+                          <span className="text-xs text-[#B5574B]">Delete?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r)}
+                            disabled={deletingId === r.id}
+                            className="rounded px-1.5 py-0.5 text-xs font-medium text-[#B5574B] hover:bg-[#B5574B]/10 disabled:opacity-50"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(0)}
+                            className="rounded px-1.5 py-0.5 text-xs text-[#7A8580] hover:bg-[#EEF5EC]"
+                          >
+                            No
+                          </button>
+                        </>
+                      )}
+                      {confirmDeleteId !== r.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError("");
+                            setConfirmDeleteId(r.id);
+                          }}
+                          title="Delete transaction"
+                          aria-label={"Delete " + (r.label || "this transaction")}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#7A8580] hover:bg-[#B5574B]/10 hover:text-[#B5574B]"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
                   </li>
