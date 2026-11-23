@@ -1,7 +1,7 @@
 "use client";
 import {useEffect, useMemo, useState} from "react";
 import Link from "next/link";
-import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {mockTransactions, mockCategories, mockAccounts} from "../../../mocks";
 import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, Category } from "../../../types/api";
@@ -180,6 +180,9 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(!USE_MOCK);
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  //The transaction being edited
+  const [editingRow, setEditingRow] = useState<Row | null>(null);
 
   //Store the delete state
   const [confirmDeleteId, setConfirmDeleteId] = useState(0); 
@@ -786,6 +789,18 @@ export default function TransactionsPage() {
                           </button>
                         </>
                       )}
+                      {/* Edit button, opens the form with this transaction filled in */}
+                      {confirmDeleteId !== r.id && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingRow(r)}
+                          title="Edit transaction"
+                          aria-label={"Edit " + (r.label || "this transaction")}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#7A8580] hover:bg-[#EEF5EC] hover:text-[#3F5747]"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {confirmDeleteId !== r.id && (
                         <button
                           type="button"
@@ -814,11 +829,40 @@ export default function TransactionsPage() {
         <AddTransactionForm
           accounts={accounts}
           categories={categories}
+          editing={null}
           onCategoryCreated={addCategory}
           onClose={() => setShowForm(false)}
           onCreated={(row) => {
             setRows((prev) => [row, ...prev]);
             setShowForm(false);
+          }}
+          onUpdated={() => {}}
+        />
+      )}
+
+      {/* The same form is used for editing, filled in with the transaction */}
+      {editingRow !== null && (
+        <AddTransactionForm
+          accounts={accounts}
+          categories={categories}
+          editing={editingRow}
+          onCategoryCreated={addCategory}
+          onClose={() => setEditingRow(null)}
+          onCreated={() => {}}
+          onUpdated={(updatedRow) => {
+            //Replace the old transaction with the updated one
+            setRows((prev) => {
+              const updated: Row[] = [];
+              for (const r of prev) {
+                if (r.id === updatedRow.id) {
+                  updated.push(updatedRow);
+                } else {
+                  updated.push(r);
+                }
+              }
+              return updated;
+            });
+            setEditingRow(null);
           }}
         />
       )}
@@ -833,10 +877,12 @@ interface AddTransactionFormProps {
   onCategoryCreated: (category: Category) => void;
   onClose: () => void;
   onCreated: (row: Row) => void; 
+  editing: Row | null; 
+  onUpdated: (row: Row) => void;
 }
 
-//Form for adding a new transaction
-function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, onCreated }: AddTransactionFormProps) {
+//Form for adding a new transaction, or editing one
+function AddTransactionForm({ accounts, categories, editing, onCategoryCreated, onClose, onCreated, onUpdated }: AddTransactionFormProps) {
   //Pick "Other" as the starting category, or the first one if "Other" is missing
   let startCategoryId = 0;
   for (const c of categories) {
@@ -848,14 +894,33 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
     startCategoryId = categories[0].id;
   }
 
+  //Starting values: empty for a new transaction, or the old values when editing
+  let startDate = today();
+  let startKind: "expense" | "income" = "expense";
+  let startAmount = "";
+  let startLabel = "";
+  let startDescription = "";
+  let startAccountId = accounts[0].id;
+  if (editing !== null) {
+    startDate = editing.date;
+    if (editing.amount >= 0) {
+      startKind = "income";
+    }
+    startAmount = Math.abs(editing.amount).toFixed(2); //The form shows a positive number
+    startLabel = editing.label;
+    startDescription = editing.description;
+    startCategoryId = editing.categoryId;
+    startAccountId = editing.accountId;
+  }
+
   //Store the information entered in the form
-  const [date, setDate] = useState(today());
-  const [kind, setKind] = useState<"expense" | "income">("expense");
-  const [amount, setAmount] = useState("");
-  const [label, setLabel] = useState("");
-  const [description, setDescription] = useState("");
+  const [date, setDate] = useState(startDate);
+  const [kind, setKind] = useState<"expense" | "income">(startKind);
+  const [amount, setAmount] = useState(startAmount);
+  const [label, setLabel] = useState(startLabel);
+  const [description, setDescription] = useState(startDescription);
   const [categoryId, setCategoryId] = useState(startCategoryId);
-  const [accountId, setAccountId] = useState(accounts[0].id);
+  const [accountId, setAccountId] = useState(startAccountId);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -944,6 +1009,28 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
       return;
     }
 
+    //Editing
+    if (editing !== null) {
+      setSaving(true);
+      try {
+        const updated = await apiFetch<BackendTransaction>(`/api/transactions/${editing.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ date, amount: signed, label: label.trim(), description, categoryId }),
+        });
+        onUpdated(fromBackend(updated));
+      } catch (e) {
+        //Show an error if the changes cannot be saved
+        if (e instanceof ApiRequestError) {
+          setError(e.message);
+        } else {
+          setError("Could not save the changes.");
+        }
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     //Send the new transaction to the backend
     setSaving(true);
     try {
@@ -960,6 +1047,16 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
     }
   }
 
+  //Text that changes between adding and editing
+  let title = "Add transaction";
+  let saveText = "Save transaction";
+  let accountTitle = "";
+  if (editing !== null) {
+    title = "Edit transaction";
+    saveText = "Save changes";
+    accountTitle = "The account can't be changed";
+  }
+
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/20 px-4" onClick={onClose}>
       {/* Add transaction form */}
@@ -970,7 +1067,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
       >
         {/* Form title and close button */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#3F4A45]">Add transaction</h2>
+          <h2 className="text-xl font-semibold text-[#3F4A45]">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-[#7A8580]">
             <X className="h-5 w-5" />
           </button>
@@ -1075,11 +1172,14 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
             <div className="flex h-5 items-center">
               <label htmlFor="account" className="text-sm text-[#4F6657]">Account</label>
             </div>
+            {/* The account can't be changed when editing */}
             <select
               id="account"
               value={accountId}
               onChange={(e)=>setAccountId(Number(e.target.value))}
-              className={inputClass}
+              disabled={editing !== null}
+              title={accountTitle}
+              className={inputClass + " disabled:bg-[#F2F2EE] disabled:text-[#7A8580]"}
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
@@ -1141,7 +1241,7 @@ function AddTransactionForm({ accounts, categories, onCategoryCreated, onClose, 
           disabled={saving}
           className="w-full rounded-lg border border-[#CFE0CF] bg-[#EEF5EC] px-4 py-3 font-medium text-[#3F5747] transition hover:bg-[#E4EFE3] disabled:opacity-60"
         >
-          {saving ? "Saving…" : "Save transaction"}
+          {saving ? "Saving…" : saveText}
         </button>
       </form>
     </div>
