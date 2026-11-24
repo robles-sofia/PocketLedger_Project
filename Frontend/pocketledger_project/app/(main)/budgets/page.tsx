@@ -29,6 +29,15 @@ const categories = mockCategories;
 const budgetableCategories = categories.filter((category) => category.name !== "Income");
 const categoryById = new Map(categories.map((c) => [c.id, c]));
 
+//Data returned by GET /api/net-savings
+interface NetSavingsResponse {
+  netSavings: number | string;
+}
+
+function formatDollars(amount: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+}
+
 
 export default function BudgetsPage() { 
   //Store loading, error, and form states
@@ -40,6 +49,10 @@ export default function BudgetsPage() {
   const [monthSelected, setMonthSelected] = useState("2026-11");
   const [accounts, setAccounts] = useState<Account[]>(USE_MOCK ? mockAccounts : []);
   const [budget, setBudget] = useState<MonthlyBudget>();
+
+  //Net savings from all past months 
+  const [netSavings, setNetSavings] = useState<number | null>(null);
+  const [netSavingsError, setNetSavingsError] = useState("");
   //Find accounts by their ID
   const accountById = new Map<number, Account>();
   for (const account of accounts) {
@@ -76,6 +89,18 @@ export default function BudgetsPage() {
         const normalizedBudget = "budget" in budgetData ? budgetData.budget : budgetData;
         setBudget(normalizedBudget);
         setLoadError("");
+
+        //Get net savings. If this fails, the rest of the page still works
+        try {
+          const savingsData = await apiFetch<NetSavingsResponse>("/api/net-savings");
+          setNetSavings(Number(savingsData.netSavings));
+        } catch (e) {
+          if (e instanceof ApiRequestError) {
+            setNetSavingsError(e.message);
+          } else {
+            setNetSavingsError("Could not load net savings.");
+          }
+        }
       } catch (e) {
         setLoadError(e instanceof ApiRequestError ? e.message : "Could not load data.");
       } finally {
@@ -103,6 +128,12 @@ export default function BudgetsPage() {
     load();
   }, [monthSelected])
 
+
+  //Green when you saved money, red when you spent more than planned
+  let netSavingsColor="text-[#3E8E5A]";
+  if (netSavings!==null && netSavings < 0) {
+    netSavingsColor="text-[#B5574B]";
+  }
 
   return (
     <main className="relative min-h-screen bg-linear-to-b from-[#E4EFE3] via-[#E3EDF1] via-40% to-[#FBF8EF] to-75% px-4 py-8 md:px-10">
@@ -162,6 +193,21 @@ export default function BudgetsPage() {
             <p className="text-sm text-[#7A8580]">Total Spent</p>
             <p className="mt-1 text-xl font-semibold text-[#B5574B]">${budget?.totalSpent}</p>
           </div>
+        </div>
+
+        {/* Net savings */}
+        <div className="mt-4 rounded-xl border border-white/70 bg-white/60 p-4">
+          <p className="text-sm text-[#7A8580]">Net savings</p>
+          {netSavings!==null && (
+            <p className={"mt-1 text-xl font-semibold " + netSavingsColor}>{formatDollars(netSavings)}</p>
+          )}
+          {netSavings===null && netSavingsError==="" && (
+            <p className="mt-1 text-xl font-semibold text-[#7A8580]">Loading…</p>
+          )}
+          {netSavingsError!=="" && <p className="mt-1 text-sm text-[#B5574B]">{netSavingsError}</p>}
+          <p className="mt-1 text-xs text-[#7A8580]">
+            Planned minus spent, added up over all past months that had a budget. The current month isn&apos;t counted until it ends.
+          </p>
         </div>
 
         <section className="mt-6 rounded-xl border border-white/70 bg-white/60 p-4">
