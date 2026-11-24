@@ -1,17 +1,17 @@
 **PocketLedger API Contract**
 
-This document defines the API between our Next.js frontend and Spring Boot backend. We want to agree on what the frontend sends and what the backend returns so both sides can be developed at the same time. This is still a draft and may change as we work more on the project.
+This document defines the API between our Next.js frontend and Spring Boot backend. It describes what the frontend sends and what the backend returns, and it matches the code on `main`.
 
 **Base URL:** For local development, the backend runs at `http://localhost:8080/api`. The Next.js frontend runs at `http://localhost:3000`.
 
-**Money:** Money values are sent as strings. The backend uses `BigDecimal`, and the frontend should use a decimal library when doing calculations with money.
+**Money:** The frontend sends amounts as strings, for example `"-18.47"`. The backend stores them as `BigDecimal` (`DECIMAL(22,10)` in the database) and returns them as JSON numbers, which can have extra decimal places. The frontend converts them with `Number()` for display.
 ```json
 {
   "amount": "-18.47"
 }
 ```
 
-**Sign convention:** Expenses are negative and income is positive. For example: coffee purchase `-6.75`, paycheck `1200.00`, refund = positive amount. CSV imports should be converted to this format.
+**Sign convention:** Expenses are negative and income is positive. For example: coffee purchase `-6.75`, paycheck `1200.00`, refund = positive amount. CSV imports should use this format.
 
 **Dates:** Dates use `YYYY-MM-DD`. Months use `YYYY-MM`.
 
@@ -32,11 +32,19 @@ The backend identifies the user from the token. The frontend does not send a `us
   }
 }
 ```
-Common HTTP status codes: `400` - Invalid request, `401` - Not logged in or invalid token, `404` - Resource not found, `409` - Conflict such as an email that is already registered or deleting the `Other` category, `429` - Too many requests, such as repeated failed logins, `500` - Server error.
+Common HTTP status codes and error codes:
+- `400` `VALIDATION_ERROR` - A field is missing or breaks a rule. `INVALID_REQUEST` - The JSON could not be read.
+- `401` - Not logged in or invalid token. Login returns `INVALID_CREDENTIALS`.
+- `403` `FORBIDDEN` - The resource belongs to another user.
+- `404` `NOT_FOUND` - Resource not found.
+- `409` `EMAIL_TAKEN` - Conflict, such as an email that is already registered. The backend currently uses this code for every `IllegalArgumentException`, so some other conflicts (for example a duplicate category name) also come back as `EMAIL_TAKEN`. The message is still correct.
+- `429` `TOO_MANY_ATTEMPTS` - Too many failed logins.
+- `503` `FX_UNAVAILABLE` - The exchange rate service is down.
+- `500` - Server error.
 
 **Authentication endpoints**
 
-Users create an account with an email and password. The backend hashes passwords with BCrypt before storing them. Register and login do not need a token. All other endpoints in this section do.
+Users create an account with an email and password. The backend hashes passwords with BCrypt before storing them. Register and login do not need a token. All other endpoints do.
 
 **Register:** `POST /api/auth/register`
 Request:
@@ -47,7 +55,7 @@ Request:
 }
 ```
 
-The password must be 8 to 72 characters. `homeCurrency` is not sent. New users start with `USD`.
+The password must be 8 to 72 characters and contain at least one letter and one number. The home currency is not sent. New users start with `USD`.
 
 Response: `201 Created`
 ```json
@@ -55,15 +63,13 @@ Response: `201 Created`
   "token": "<jwt>",
   "user": {
     "id": 1,
-    "email": "student@okstate.edu",
-    "settings": {"homeCurrency": "USD"} 
+    "email": "student@okstate.edu"
   }
 }
 ```
-The settings object is not returned yet. It will be added once the settings column is in the user table.
-The user is logged in right after registering, so the response includes a token.
+The user is logged in right after registering, so the response includes a token. Settings are not part of this response. Use `GET /api/settings` to read them.
 
-Errors: `400` `VALIDATION_ERROR` if a field is missing or the password is the wrong length. `409` `EMAIL_TAKEN` if the email is already registered.
+Errors: `400` `VALIDATION_ERROR` if a field is missing or the password breaks a rule. `409` `EMAIL_TAKEN` if the email is already registered.
 
 **Login:** `POST /api/auth/login`
 
@@ -77,45 +83,33 @@ Request:
 
 Response: `200 OK` with the same format as register.
 
-Errors: `401` `INVALID_CREDENTIALS` if the email or password is wrong. The message does not say which one was wrong. `429` `TOO_MANY_ATTEMPTS` if there have been 100 or more failed logins for that email within the last hour. The frontend should show the message from the response so the user knows to wait instead of retrying.
+Errors: `401` `INVALID_CREDENTIALS` if the email or password is wrong. The message does not say which one was wrong. `429` `TOO_MANY_ATTEMPTS` if there have been 100 or more failed logins for that email within the last hour. A successful login does not reset this count. The frontend shows "Too many failed login attempts. Please try again in 1 hour."
 
 Failed logins are recorded with the email that was typed and the time. The password that was typed is never stored.
 
 **Logout:** There is no logout endpoint. The frontend deletes the token from `localStorage` and sends the user to the login page.
 
-**Get Current User:** `GET /api/auth/me`
+**Get Settings:** `GET /api/settings`
 
 Response: `200 OK`
 ```json
 {
-  "user": {
-    "id": 1,
-    "email": "student@okstate.edu",
-    "settings": {"homeCurrency": "USD"} 
-  }
+  "currency": "USD"
 }
 ```
 
-The frontend can use this endpoint to check whether the saved token is still valid. User settings are stored as JSON in the database. `settings.homeCurrency` is `USD` by default for a new user.
+User settings are stored as JSON in the database. `currency` is the user's home currency and is `USD` by default for a new user.
 
-**Update Home Currency:** `PATCH /api/auth/me`
+**Update Home Currency:** `PUT /api/settings`
 
 Request:
 ```json
 {
-  "settings":{
-    "homeCurrency": "EUR"
-  }
+  "currency": "EUR"
 }
 ```
 
-Response: `200 OK` and the updated user. The settings page uses this endpoint when the user changes their home currency. The backend then updates `convertedAmount` for existing transactions using the exchange rate from each transaction date.
-
-**Delete Account:** `DELETE /api/auth/me`
-
-Response: `204 No Content`
-
-The user and all of their data are permanently deleted. The frontend then deletes the token.
+Response: `200 OK` with the same format as `GET /api/settings`. The settings page uses this endpoint when the user changes their home currency. The backend checks that the code is a real currency and saves it. It does not change any stored transactions. The Transactions page converts amounts to the home currency when it shows them (see Exchange rate).
 
 **Transaction**
 
@@ -123,47 +117,33 @@ Transaction format:
 ```json
 {
   "id": 42,
+  "amount": -6.75,
+  "label": "Coffee",
+  "description": null,
   "date": "2026-09-10",
-  "description": "Coffee",
-  "amount": "-6.75",
-  "currency": "USD",
-  "convertedAmount": "-6.75",
-  "exchangeRate": "1.0000",
-  "exchangeRateDate": "2026-09-10",
   "categoryId": 3,
-  "accountId": 1,
-  "categorySource": "ai"
+  "accountId": 1
 }
 ```
-Fields: `amount` = original amount, `currency` = original currency, `convertedAmount` = amount in the user's home currency, `exchangeRate` = rate used, `exchangeRateDate` = date of the rate, `categoryId` = assigned category, `accountId` = account for the transaction, `categorySource` = how the category was assigned.
+Fields: `amount` = amount in the account's currency, `label` = short name shown in the list (required), `description` = optional longer note (can be `null`), `categoryId` = assigned category, `accountId` = account for the transaction.
 
-Possible `categorySource` values: `user`, `rule`, `ai`, `default`. The frontend can mark `ai` categories so the user knows they were assigned automatically. `default` means the transaction was put in `Other` because no category was chosen.
+**Get Transactions:** `GET /api/transactions?accountId=1`
 
-**Get Transactions:** `GET /api/transactions`
+`accountId` is required. The backend returns the transactions of that account only, and returns `403` if the account belongs to another user. To show all of a user's transactions, the frontend calls this once per account.
 
-Optional query parameters: `from`, `to`, `categoryId`, `accountId`
-
-Example: `GET /api/transactions?from=2026-09-01&to=2026-09-30&categoryId=3`
-
-Response: `200 OK`
+Response: `200 OK` (a plain list)
 ```json
-{
-  "transactions": [
-    {
-      "id": 42,
-      "date": "2026-09-10",
-      "description": "Coffee",
-      "amount": "-6.75",
-      "currency": "USD",
-      "convertedAmount": "-6.75",
-      "exchangeRate": "1.0000",
-      "exchangeRateDate": "2026-09-10",
-      "categoryId": 3,
-      "accountId": 1,
-      "categorySource": "ai"
-    }
-  ]
-}
+[
+  {
+    "id": 42,
+    "amount": -6.7500000000,
+    "label": "Coffee",
+    "description": null,
+    "date": "2026-09-10",
+    "categoryId": 3,
+    "accountId": 1
+  }
+]
 ```
 
 **Create Transaction:** `POST /api/transactions`
@@ -172,14 +152,14 @@ Request:
 ```json
 {
   "date": "2026-09-10",
-  "description": "Coffee",
   "amount": "-6.75",
-  "currency": "EUR",
-  "accountId": 1,
-  "categoryId": 3
+  "label": "Coffee",
+  "description": "",
+  "categoryId": 3,
+  "accountId": 1
 }
 ```
-`categoryId` is optional. For manual transactions the user chooses the category, so `categorySource` is `user`. If no category is provided, the backend uses `Other` and `categorySource` is `default`. If the transaction currency is different from the user's home currency, the backend gets the exchange rate for the transaction date and stores the converted amount.
+`date`, `amount`, `label`, `categoryId`, and `accountId` are required. `label` can't be blank and is at most 255 characters. `description` is optional, at most 4095 characters. The account must belong to the user, and the category must be a default category or one of the user's own (otherwise `403`).
 
 Response: `201 Created` and the created transaction.
 
@@ -187,52 +167,61 @@ Response: `201 Created` and the created transaction.
 
 Example: `PUT /api/transactions/42`
 
-Request: Same fields as `POST /api/transactions`. If the user manually changes the category, `categorySource` becomes `user`.
-
-Response: `200 OK` and the updated transaction.
-
-**Delete Transaction:** `DELETE /api/transactions/{id}`
-
-Response: `204 No Content`
-
-Transactions use hard delete, so deleted transactions are permanently removed from the database and cannot be restored.
-
-**Categories**
-
-For the MVP, categories support read and delete. Users cannot create or rename categories. Every new user starts with a default list of categories.
-
-**Get Categories:** `GET /api/categories`
-
-Response: `200 OK`
+Request: Same fields as `POST /api/transactions`, except `accountId`. The account of a transaction can't be changed.
 ```json
 {
-  "categories": [
-    {
-      "id": 1,
-      "name": "Food",
-      "color": "#E8833A"
-    },
-    {
-      "id": 2,
-      "name": "Transport",
-      "color": "#4A90D9"
-    },
-    {
-      "id": 8,
-      "name": "Other",
-      "color": "#9B9B9B"
-    }
-  ]
+  "date": "2026-09-10",
+  "amount": "-7.25",
+  "label": "Coffee",
+  "description": "with a muffin",
+  "categoryId": 3
 }
 ```
 
-**Delete Category:** `DELETE /api/categories/{id}`
+Response: `200 OK` and the updated transaction.
 
-Example: `DELETE /api/categories/2`
+**Delete Transaction:** `POST /api/transactions/{id}`
+
+Example: `POST /api/transactions/42` (no request body)
 
 Response: `204 No Content`
 
-All transactions in the deleted category are moved to `Other` and their `categorySource` becomes `default`. Budgets for the deleted category are removed. The `Other` category cannot be deleted (`409`).
+This endpoint uses `POST`, not `DELETE`. Transactions use hard delete, so deleted transactions are permanently removed from the database and cannot be restored.
+
+**Categories**
+
+Every user sees the same 12 default categories (Rent, Utilities, Bills, Groceries, Dining, Entertainment, Transportation, Health and Wellness, Shopping, Education, Income, Other). In the database they belong to a built-in user with id 1. Users can also create their own categories. Categories can't be renamed or deleted. Colors are not stored in the backend; the frontend picks them.
+
+**Get Categories:** `GET /api/categories`
+
+Response: `200 OK` (a plain list of the default categories plus the user's own)
+```json
+[
+  {
+    "id": 4,
+    "categoryLabel": "Groceries"
+  },
+  {
+    "id": 12,
+    "categoryLabel": "Other"
+  },
+  {
+    "id": 23,
+    "categoryLabel": "Pets"
+  }
+]
+```
+
+**Create Category:** `POST /api/categories`
+
+Request:
+```json
+{
+  "categoryLabel": "Pets"
+}
+```
+
+The name can't be blank and is at most 255 characters. Response: `201 Created` with `{ "id", "categoryLabel" }`. If the user already has a category with that name, the backend returns `409`. The backend only checks the user's own categories, so the frontend also blocks names that match a default category.
 
 **Accounts**
 
@@ -240,26 +229,22 @@ For the MVP, accounts support read and create.
 
 **Get Accounts:** `GET /api/accounts`
 
-Response: `200 OK`
+Response: `200 OK` (a plain list)
 ```json
-{
-  "accounts": [
-    {
-      "id": 1,
-      "name": "Checking",
-      "type": "checking",
-      "currency": "USD"
-    },
-    {
-      "id": 2,
-      "name": "Cash",
-      "type": "cash",
-      "currency": "USD"
-    }
-  ]
-}
+[
+  {
+    "id": 1,
+    "name": "Checking",
+    "type": "checking"
+  },
+  {
+    "id": 2,
+    "name": "Cash",
+    "type": "cash"
+  }
+]
 ```
-Possible account types: `checking`, `savings`, `credit`, `cash`.
+Possible account types: `checking`, `savings`, `credit`, `cash`. Accounts don't have a currency yet, so the frontend treats every account as `USD`.
 
 **Create Account:** `POST /api/accounts`
 
@@ -268,11 +253,13 @@ Request:
 {
   "name": "Travel Card",
   "type": "credit",
-  "currency": "EUR"
+  "settings": "{}"
 }
 ```
 
-Response: `201 Created` and the created account.
+`name` is required, at most 50 characters. `type` must be one of the lowercase types above. `settings` is required but is not used yet, so the frontend sends `"{}"`.
+
+Response: `201 Created` and the created account (`{ "id", "name", "type" }`).
 
 **Budgets**
 A budget belongs to a user and a month, not to an account. Transactions from all of the user's accounts count toward it.
@@ -283,21 +270,21 @@ Response: `200 OK`
 ```json
 {
   "month": "2026-09",
-  "totalPlanned": "1450.00",
-  "totalSpent": "1187.32",
+  "totalPlanned": 1450.00,
+  "totalSpent": 1187.32,
   "categories": [
     {
-      "categoryId": 1,
-      "categoryName": "Food",
-      "planned": "400.00",
-      "spent": "312.18",
-      "remaining": "87.82"
+      "categoryId": 4,
+      "categoryName": "Groceries",
+      "planned": 400.00,
+      "spent": 312.18,
+      "remaining": 87.82
     }
   ]
 }
 ```
 
-Budget values are positive. `spent` is the amount spent in that category for the month. `remaining` can be negative if the user goes over budget.
+Budget values are positive. `spent` is the amount spent in that category for the month, transactions in the Income category are not counted. `remaining` can be negative if the user goes over budget. If the user has no budget for that month, the totals are `0`.
 
 **Save Monthly Budget:** `PUT /api/budgets`
 
@@ -307,66 +294,32 @@ Request:
   "month": "2026-09",
   "budgets": [
     {
-      "categoryId": 1,
+      "categoryId": 4,
       "amount": "400.00"
     },
     {
-      "categoryId": 2,
+      "categoryId": 7,
       "amount": "80.00"
     }
   ]
 }
 ```
 
+Amounts must be `0` or more. The whole month is sent at once, and saving replaces what was there before.
+
 Response: `200 OK` with the same format as `GET /api/budgets`.
 
 **CSV Import**
 
-CSV import has two steps: upload the file and check the column mapping, then confirm the mapping and import the transactions.
+CSV import is one step: upload the file, and the backend imports the rows.
 
-**Preview CSV:** `POST /api/import/preview`
+**Import CSV:** `POST /api/import`
 
 Request type: `multipart/form-data`
 
-File field: `file`
+Fields: `file` = the CSV file, `accountId` = the account to import into, `categorize` = optional, `true` to let AI pick a category for each row (default `false`).
 
-Response: `200 OK`
-```json
-{
-  "uploadId": "abc123",
-  "columns": [
-    "Transaction Date",
-    "Description",
-    "Amount"
-  ],
-  "sampleRows": [
-    ["08/14/2026", "TARGET", "-6.75"],
-    ["08/15/2026", "WALMART #2841", "-52.30"]
-  ],
-  "rowCount": 284
-}
-```
-
-The frontend uses this information to let the user choose the correct date, description, and amount columns.
-
-**Import CSV:** `POST /api/import/commit`
-
-Request:
-```json
-{
-  "uploadId": "abc123",
-  "accountId": 1,
-  "mapping": {
-    "date": "Transaction Date",
-    "description": "Description",
-    "amount": "Amount"
-  },
-  "dateFormat": "MM/DD/YYYY",
-  "signConvention": "negative_is_expense"
-}
-```
-
-`signConvention` tells the backend how the CSV represents expenses and income.
+The first row must be a header with columns whose names contain `date`, `description`, and `amount`. If one is missing, the backend throws `InvalidCsvException`. That exception has no handler in `ApiExceptionHandler` yet, so it currently comes back as a generic `500`. Dates can be `YYYY-MM-DD` or `MM/DD/YYYY`. Amounts can include `$`. The description becomes the transaction's `label`.
 
 Response: `200 OK`
 ```json
@@ -377,13 +330,15 @@ Response: `200 OK`
 }
 ```
 
-`skipped` includes duplicate transactions. Categorization also runs during import. The backend checks saved rules first, then uses AI if no rule matches. If AI also fails, the transaction goes to `Other`.
+`imported` = rows saved. `skipped` = rows that couldn't be used. `failed` = rows that caused an error while saving. Imported rows go to `Other`, unless `categorize` is `true`, in which case Gemini picks a category and the row goes to `Other` if it can't.
+
+Known limitation: each line is split on every comma, so quoted values that contain commas are not supported yet.
 
 **AI**
 
 **Categorize Transactions:** `POST /api/ai/categorize`
 
-This endpoint can be used to re-categorize existing transactions.
+This endpoint re-categorizes existing transactions and saves the new categories. The Transactions page uses it for its "Auto-categorize" button and the per-row AI button.
 
 Request:
 ```json
@@ -398,45 +353,26 @@ Response: `200 OK`
   "results": [
     {
       "id": 42,
-      "categoryId": 1,
-      "source": "rule",
+      "categoryId": 4,
+      "source": "ai",
       "confidence": null
     },
     {
       "id": 57,
-      "categoryId": 3,
+      "categoryId": 7,
       "source": "ai",
-      "confidence": 0.92
+      "confidence": null
     },
     {
       "id": 61,
-      "categoryId": 8,
+      "categoryId": 12,
       "source": "default",
-      "confidence": 0.31
+      "confidence": null
     }
   ]
 }
 ```
-The backend only accepts categories that already belong to the user. If no category can be assigned, `categoryId` is the user's `Other` category and `source` is `default`. If Gemini is unavailable, transactions that cannot be handled by saved rules are also returned as `Other` with `default`.
-
-**Ask about spending:** `POST /api/ai/ask`
-
-Request:
-```json
-{
-  "question": "How much did I spend on food in October?"
-}
-```
-
-Response: `200 OK`
-```json
-{
-  "answer": "You spent $312.18 on Food in October 2026.",
-  "transactionIds": [42, 57, 61]
-}
-```
-
-`transactionIds` contains the transactions used for the answer so the frontend can display them.
+`source` is `ai` when Gemini picked a category and `default` when it didn't and the transaction went to `Other`. `confidence` is always `null`, because Gemini only returns a category, not a score. The backend only accepts categories that belong to the user. If Gemini is unavailable, the transactions go to `Other` with `default`. Transactions owned by another user return `403`.
 
 **Exchange rate**
 
@@ -448,17 +384,19 @@ Response: `200 OK`
   "from": "EUR",
   "to": "USD",
   "date": "2026-09-10",
-  "rate": "1.0824"
+  "rate": 1.0824
 }
 ```
 
-Currency conversion is handled by the backend. The backend uses the exchange rate from the transaction date instead of the current exchange rate.
+The backend gets rates from Frankfurter. `date` is the date the rate is actually from. If both currencies are the same, the rate is `1`. If there is no rate for that currency or date, the backend returns `404`. If the provider is down, it returns `503` `FX_UNAVAILABLE`.
+
+The frontend does the conversion: for each transaction, it asks for the rate on that transaction's date, and shows the converted amount and totals in the home currency. Each currency and date is only requested once.
 
 **Assumptions**
 1. We use email and password login. The backend returns a JWT in the response body, and the frontend stores it in `localStorage` and sends it as `Authorization: Bearer <token>`. Tokens expire after 24 hours, and the backend signs them with `JWT_SECRET` from `.env`.
-2. New users start with `USD` as their `settings.homeCurrency`. They can change it in settings using `PATCH /api/auth/me`. If it changes, the backend recalculates `convertedAmount` for existing transactions so the app uses the new home currency.
-3. `categorySource` `default` means the category did not come from the user, a saved rule, or AI. This can happen when a manual transaction has no category, when rules and AI both fail during CSV import or `POST /api/ai/categorize`, or when a category is deleted. In these cases, the transaction goes to `Other`. We still need to decide what AI confidence score is too low.
-4. Rules and AI are only used for CSV imports and `POST /api/ai/categorize`. Manual transactions use the category selected by the user. We have not decided yet how new rules will be created.
-5. `Other` is one of the default categories and cannot be deleted. The frontend should not show a delete button for it. We have not decided the full default category list yet.
-6. All deletes are hard deletes for now, including transactions, categories, and user accounts.
-7. `settings.homeCurrency` is always `USD` for now.
+2. New users start with `USD` as their home currency. They can change it in Settings using `PUT /api/settings`. Stored transactions are not changed; the Transactions page converts them when it shows them, using the rate from each transaction's date.
+3. There is no `categorySource` field on transactions. The only place a source appears is the `POST /api/ai/categorize` response (`ai` or `default`), and it isn't stored. A transaction goes to `Other` when AI can't pick a category, during CSV import or `POST /api/ai/categorize`.
+4. There are no saved rules. AI is only used for CSV import (with `categorize=true`) and `POST /api/ai/categorize`. Manual transactions use the category selected by the user (the form starts on `Other`).
+5. `Other` is one of the 12 default categories. Categories can't be deleted, so `Other` is always there.
+6. Deleting a transaction is a hard delete. Categories and user accounts can't be deleted.
+7. Users can change their home currency, but accounts don't have their own currency yet, so every account is treated as `USD`.
