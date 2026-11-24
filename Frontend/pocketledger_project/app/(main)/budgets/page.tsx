@@ -1,7 +1,7 @@
 "use client";
 import { Plus, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import {mockTransactions, mockCategories, mockAccounts, mockBudget} from "../../../mocks";
+import {mockTransactions, mockAccounts, mockBudget} from "../../../mocks";
 import {apiFetch, ApiRequestError} from "../../../lib/api";
 import type { Account, AccountType, MonthlyBudget } from "../../../types/api";
 const USE_MOCK = false; 
@@ -25,9 +25,17 @@ function accountFromBackend(a: BackendAccount): Account {
 const inputClass =
   "mt-1 w-full rounded-lg border border-[#CFE0CF] bg-white px-3 py-2 text-[#3F4A45] focus:outline-none focus:ring-2 focus:ring-[#A9C9B0]";
 
-const categories = mockCategories;
-const budgetableCategories = categories.filter((category) => category.name !== "Income");
-const categoryById = new Map(categories.map((c) => [c.id, c]));
+//Category data returned by GET /api/categories
+interface BackendCategory {
+  id: number;
+  categoryLabel: string;
+}
+
+//A category that can get a budget
+interface BudgetableCategory {
+  id: number;
+  name: string;
+}
 
 //Data returned by GET /api/net-savings
 interface NetSavingsResponse {
@@ -49,6 +57,9 @@ export default function BudgetsPage() {
   const [monthSelected, setMonthSelected] = useState("2026-11");
   const [accounts, setAccounts] = useState<Account[]>(USE_MOCK ? mockAccounts : []);
   const [budget, setBudget] = useState<MonthlyBudget>();
+
+  //The default categories plus the user's own categories
+  const [budgetableCategories, setBudgetableCategories] = useState<BudgetableCategory[]>([]);
 
   //Net savings from all past months 
   const [netSavings, setNetSavings] = useState<number | null>(null);
@@ -82,6 +93,17 @@ export default function BudgetsPage() {
           loadedAccounts.push(accountFromBackend(account));
         }
         setAccounts(loadedAccounts);
+
+        //Get the categories, so custom categories can have a budget too.
+        //Income is not a spending category, so it doesn't get a budget
+        const categoryData = await apiFetch<BackendCategory[]>("/api/categories");
+        const loadedCategories: BudgetableCategory[] = [];
+        for (const category of categoryData) {
+          if (category.categoryLabel !== "Income") {
+            loadedCategories.push({ id: category.id, name: category.categoryLabel });
+          }
+        }
+        setBudgetableCategories(loadedCategories);
 
         //Get user's budget info for this month.
         const budgetData = await apiFetch<MonthlyBudget | { budget: MonthlyBudget}>(`/api/budgets?userID=0&month=${monthSelected}`); //userID=8&month=
@@ -130,9 +152,9 @@ export default function BudgetsPage() {
 
 
   //Green when you saved money, red when you spent more than planned
-  let netSavingsColor="text-[#3E8E5A]";
-  if (netSavings!==null && netSavings < 0) {
-    netSavingsColor="text-[#B5574B]";
+  let netSavingsColor = "text-[#3E8E5A]";
+  if (netSavings !== null && netSavings < 0) {
+    netSavingsColor = "text-[#B5574B]";
   }
 
   return (
@@ -195,16 +217,16 @@ export default function BudgetsPage() {
           </div>
         </div>
 
-        {/* Net savings */}
+        {/* Net savings: money left over from the budgets of all past months */}
         <div className="mt-4 rounded-xl border border-white/70 bg-white/60 p-4">
           <p className="text-sm text-[#7A8580]">Net savings</p>
-          {netSavings!==null && (
+          {netSavings !== null && (
             <p className={"mt-1 text-xl font-semibold " + netSavingsColor}>{formatDollars(netSavings)}</p>
           )}
-          {netSavings===null && netSavingsError==="" && (
+          {netSavings === null && netSavingsError === "" && (
             <p className="mt-1 text-xl font-semibold text-[#7A8580]">Loading…</p>
           )}
-          {netSavingsError!=="" && <p className="mt-1 text-sm text-[#B5574B]">{netSavingsError}</p>}
+          {netSavingsError !== "" && <p className="mt-1 text-sm text-[#B5574B]">{netSavingsError}</p>}
           <p className="mt-1 text-xs text-[#7A8580]">
             Planned minus spent, added up over all past months that had a budget. The current month isn&apos;t counted until it ends.
           </p>
@@ -255,6 +277,7 @@ export default function BudgetsPage() {
       {showForm && budget && (
         <CreateBudgetForm
           budget={budget}
+          budgetableCategories={budgetableCategories}
           month={monthSelected}
           onClose={() => setShowForm(false)}
           onCreated={(updatedBudget) => {
@@ -271,12 +294,13 @@ export default function BudgetsPage() {
 //Information the form gets from the page
 interface CreateBudgetFormProps {
   budget: MonthlyBudget; 
+  budgetableCategories: BudgetableCategory[]; //Categories shown in the form
   month: string;
   onClose: () => void; 
   onCreated: (budget: MonthlyBudget) => void; 
 }
 
-function CreateBudgetForm({ budget, month, onClose, onCreated }: CreateBudgetFormProps) {
+function CreateBudgetForm({ budget, budgetableCategories, month, onClose, onCreated }: CreateBudgetFormProps) {
   //Store the information entered in the form
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
