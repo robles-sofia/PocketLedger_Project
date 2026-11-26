@@ -1,12 +1,9 @@
 /* 
 This file is used SOLELY to set-up the database, the FIRST time it is run. Running it subsequently will 
 DELETE all existing data in the database. Do NOT run it arbitrarily.
-
 */ 
 
-/*
-To-do list: UPDATE DOCS <- Several critical changes made
-*/
+
 
 DROP DATABASE IF EXISTS TBD_DB; -- Deletes everything.
 CREATE DATABASE TBD_DB;
