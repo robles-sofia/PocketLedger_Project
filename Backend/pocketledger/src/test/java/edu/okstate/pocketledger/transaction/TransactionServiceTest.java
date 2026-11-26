@@ -61,7 +61,7 @@ public class TransactionServiceTest {
     }
 
     @Test
-void getTransactionsByAccountRejectsUnauthorizedUser() {
+    void getTransactionsByAccountRejectsUnauthorizedUser() {
 
     // Create a fake account owner
     User owner = Mockito.mock(User.class);
