@@ -42,8 +42,22 @@ interface NetSavingsResponse {
   netSavings: number | string;
 }
 
-function formatDollars(amount: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+interface SettingsResponse {
+  currency: string;
+}
+
+interface FxRateResponse {
+  rate: number | string;
+}
+
+function formatMoney(amount: number, currency: string) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+}
+
+function today() {
+  const date = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 
@@ -57,6 +71,9 @@ export default function BudgetsPage() {
   const [monthSelected, setMonthSelected] = useState("2026-11");
   const [accounts, setAccounts] = useState<Account[]>(USE_MOCK ? mockAccounts : []);
   const [budget, setBudget] = useState<MonthlyBudget>();
+  const [homeCurrency, setHomeCurrency] = useState("USD");
+  const [fxRate, setFxRate] = useState<number | null>(1);
+  const [fxError, setFxError] = useState("");
 
   //The default categories plus the user's own categories
   const [budgetableCategories, setBudgetableCategories] = useState<BudgetableCategory[]>([]);
@@ -72,12 +89,35 @@ export default function BudgetsPage() {
   const allocatedCategories =
     budget?.categories.filter((category) => Number(category.planned) > 0) ?? [];
 
+  function formatBudgetAmount(amount: number | string | undefined) {
+    if (amount === undefined) {
+      return "—";
+    }
+    if (fxError !== "") {
+      return formatMoney(Number(amount), "USD");
+    }
+    if (fxRate === null) {
+      return "Converting…";
+    }
+    return formatMoney(Number(amount) * fxRate, homeCurrency);
+  }
+
   //Load the user's accounts and budget data
   useEffect(() => {
     if (USE_MOCK) return;
 
     async function load() {
       try {
+        //Get the home currency from Settings (keep USD if this fails)
+        try {
+          const settings = await apiFetch<SettingsResponse>("/api/settings");
+          if (settings.currency) {
+            setHomeCurrency(settings.currency);
+          }
+        } catch {
+          //The page still works in USD
+        }
+
         //Get the user's accounts from the backend
         const accountData = await apiFetch<BackendAccount[] | { accounts: BackendAccount[] }>("/api/accounts");
         //The backend sends a list. 
@@ -131,6 +171,40 @@ export default function BudgetsPage() {
     }
     load();
   }, []);
+
+  //Convert budget amounts from USD to the selected home currency.
+  useEffect(() => {
+    if (homeCurrency === "USD") {
+      setFxRate(1);
+      setFxError("");
+      return;
+    }
+
+    let cancelled = false;
+    setFxRate(null);
+    setFxError("");
+
+    async function loadRate() {
+      try {
+        const data = await apiFetch<FxRateResponse>(
+          `/api/fx/rate?from=USD&to=${homeCurrency}&date=${today()}`,
+        );
+        if (!cancelled) {
+          setFxRate(Number(data.rate));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setFxError(
+            e instanceof ApiRequestError ? e.message : "Exchange rates are currently unavailable.",
+          );
+        }
+      }
+    }
+    loadRate();
+    return () => {
+      cancelled = true;
+    };
+  }, [homeCurrency]);
 
   //update budget whenever monthSelected changes
   useEffect (() => {
@@ -208,12 +282,12 @@ export default function BudgetsPage() {
         <div className="mt-6 grid grid-cols-2 gap-4">
           <div className="rounded-xl border border-white/70 bg-white/60 p-4">
             <p className="text-sm text-[#7A8580]">Total Planned</p>
-            <p className="mt-1 text-xl font-semibold text-[#3E8E5A]">${budget?.totalPlanned}</p>
+            <p className="mt-1 text-xl font-semibold text-[#3E8E5A]">{formatBudgetAmount(budget?.totalPlanned)}</p>
           </div>
           
           <div className="rounded-xl border border-white/70 bg-white/60 p-4">
             <p className="text-sm text-[#7A8580]">Total Spent</p>
-            <p className="mt-1 text-xl font-semibold text-[#B5574B]">${budget?.totalSpent}</p>
+            <p className="mt-1 text-xl font-semibold text-[#B5574B]">{formatBudgetAmount(budget?.totalSpent)}</p>
           </div>
         </div>
 
@@ -221,7 +295,7 @@ export default function BudgetsPage() {
         <div className="mt-4 rounded-xl border border-white/70 bg-white/60 p-4">
           <p className="text-sm text-[#7A8580]">Net savings</p>
           {netSavings !== null && (
-            <p className={"mt-1 text-xl font-semibold " + netSavingsColor}>{formatDollars(netSavings)}</p>
+            <p className={"mt-1 text-xl font-semibold " + netSavingsColor}>{formatBudgetAmount(netSavings)}</p>
           )}
           {netSavings === null && netSavingsError === "" && (
             <p className="mt-1 text-xl font-semibold text-[#7A8580]">Loading…</p>
@@ -230,6 +304,14 @@ export default function BudgetsPage() {
           <p className="mt-1 text-xs text-[#7A8580]">
             Planned minus spent, added up over all past months that had a budget. The current month isn&apos;t counted until it ends.
           </p>
+          {fxError !== "" && (
+            <p className="mt-1 text-xs text-[#B5574B]">{fxError} Budget amounts are shown in USD.</p>
+          )}
+          {fxError === "" && homeCurrency !== "USD" && fxRate !== null && (
+            <p className="mt-1 text-xs text-[#7A8580]">
+              Budget amounts are shown in {homeCurrency}, using today&apos;s exchange rate.
+            </p>
+          )}
         </div>
 
         <section className="mt-6 rounded-xl border border-white/70 bg-white/60 p-4">
@@ -244,20 +326,20 @@ export default function BudgetsPage() {
                   <div>
                     <h3 className="font-medium text-[#3F4A45]">{category.categoryName}</h3>
                     <p className="text-sm text-[#7A8580]">
-                      Planned: ${Number(category.planned).toFixed(2)}
+                      Planned: {formatBudgetAmount(category.planned)}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-6 text-sm">
                     <div>
                       <p className="text-[#7A8580]">Spent</p>
                       <p className="font-medium text-[#B5574B]">
-                        ${Number(category.spent).toFixed(2)}
+                        {formatBudgetAmount(category.spent)}
                       </p>
                     </div>
                     <div>
                       <p className="text-[#7A8580]">Remaining</p>
                       <p className="font-medium text-[#3E8E5A]">
-                        ${Number(category.remaining).toFixed(2)}
+                        {formatBudgetAmount(category.remaining)}
                       </p>
                     </div>
                   </div>
@@ -279,6 +361,9 @@ export default function BudgetsPage() {
           budget={budget}
           budgetableCategories={budgetableCategories}
           month={monthSelected}
+          homeCurrency={homeCurrency}
+          fxRate={fxRate}
+          fxError={fxError}
           onClose={() => setShowForm(false)}
           onCreated={(updatedBudget) => {
             setBudget(updatedBudget);
@@ -296,11 +381,23 @@ interface CreateBudgetFormProps {
   budget: MonthlyBudget; 
   budgetableCategories: BudgetableCategory[]; //Categories shown in the form
   month: string;
+  homeCurrency: string;
+  fxRate: number | null;
+  fxError: string;
   onClose: () => void; 
   onCreated: (budget: MonthlyBudget) => void; 
 }
 
-function CreateBudgetForm({ budget, budgetableCategories, month, onClose, onCreated }: CreateBudgetFormProps) {
+function CreateBudgetForm({
+  budget,
+  budgetableCategories,
+  month,
+  homeCurrency,
+  fxRate,
+  fxError,
+  onClose,
+  onCreated,
+}: CreateBudgetFormProps) {
   //Store the information entered in the form
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -313,6 +410,20 @@ function CreateBudgetForm({ budget, budgetableCategories, month, onClose, onCrea
       return values;
     }, {}),
   );
+
+  function convertedAmount(amount: string | undefined) {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value < 0) {
+      return "Enter a valid amount to see the conversion.";
+    }
+    if (fxError !== "") {
+      return "Conversion unavailable.";
+    }
+    if (fxRate === null) {
+      return "Converting…";
+    }
+    return `≈ ${formatMoney(value * fxRate, homeCurrency)}`;
+  }
 
   //Save the budget when the form is submitted
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
@@ -371,8 +482,13 @@ function CreateBudgetForm({ budget, budgetableCategories, month, onClose, onCrea
           </button>
         </div>
         <p className="text-sm text-[#7A8580]">
-          Enter a planned amount for each category. Leave categories without a budget blank.
+          Enter planned amounts in USD. When your home currency differs, its equivalent appears below each amount. Leave categories without a budget blank.
         </p>
+        {homeCurrency !== "USD" && fxError !== "" && (
+          <p className="text-sm text-[#B5574B]">
+            {fxError} Home-currency previews are unavailable.
+          </p>
+        )}
 
         <div className="space-y-3">
           {budgetableCategories.map((category) => (
@@ -393,6 +509,11 @@ function CreateBudgetForm({ budget, budgetableCategories, month, onClose, onCrea
                 }
                 className={inputClass}
               />
+              {homeCurrency !== "USD" && Boolean(amounts[category.id]?.trim()) && (
+                <p className="mt-1 text-right text-xs tabular-nums text-[#7A8580]">
+                  {convertedAmount(amounts[category.id])}
+                </p>
+              )}
             </div>
           ))}
         </div>
