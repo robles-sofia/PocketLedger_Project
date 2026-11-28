@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import edu.okstate.pocketledger.category.Category;
 import edu.okstate.pocketledger.category.CategoryService;
@@ -13,6 +14,7 @@ import edu.okstate.pocketledger.category.CategoryService;
 public class GeminiCategorizationServiceTest {
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "GEMINI_API_KEY", matches = ".+")
     void categorizeTransactionUsingGemini() {
 
         // Create a fake category service for the test.

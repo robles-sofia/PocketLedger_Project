@@ -29,7 +29,7 @@ class AuthEndpointTest {
 
         // same body works for both calls since register and login take same 2 fields
         String body = """
-                {"email":"integration@okstate.edu","password":"testpassword"}
+                {"email":"integration@okstate.edu","password":"testpassword1"}
                 """;
 
                 // register first
@@ -51,7 +51,7 @@ class AuthEndpointTest {
     @Test 
     void registeringTheSameEmailTwiceIsRejected() throws Exception {
         String body = """
-                {"email":"duplicate@okstate.edu","password":"testpassword"}
+                {"email":"duplicate@okstate.edu","password":"testpassword1"}
                 """;
 
                 // first one goes through, just setup, don't assert on it
@@ -69,12 +69,12 @@ class AuthEndpointTest {
 
         // set up real account
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-                {"email":"wrongpass@okstate.edu","password":"testpassword"}
+                {"email":"wrongpass@okstate.edu","password":"testpassword1"}
                 """));
 
         // right email, wrong pass
         // unit test checks exception type, this checks what API sends back
-        mockMvc.perform(post("api/auth/login").contentType(MediaType.APPLICATION_JSON).content("""
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("""
                 {"email":"wrongpass@okstate.edu","password":"notmypassword"}
                 """))
                 .andExpect(status().isUnauthorized())

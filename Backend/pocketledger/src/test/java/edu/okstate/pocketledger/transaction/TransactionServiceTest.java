@@ -170,6 +170,7 @@ void createTransactionSavesTransaction() {
 
     // Create a fake category
     Category category = Mockito.mock(Category.class);
+    when(category.getUser()).thenReturn(owner);
 
     // Create fake repositories
     TransactionRepository transactionRepository =
